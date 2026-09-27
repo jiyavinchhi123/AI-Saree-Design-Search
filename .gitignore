@@ -22,6 +22,9 @@ ENV/
 # Databases & local stores
 *.sqlite3
 *.db
+*.index
+backend/data/indexes/*.index
+backend/data/indexes/users/
 backend/data/storage/*.jpg
 backend/data/storage/*.png
 backend/data/storage/users/

@@ -584,8 +584,15 @@ async def open_design_in_onenote(
     local_path = resolve_local_image_path(nb_name, sec_name, raw_title, img_url)
 
     user_email = None
-    if onenote_client.user_profile:
-        user_email = onenote_client.user_profile.get("userPrincipalName") or onenote_client.user_profile.get("mail")
+    uid = design.get("user_id")
+    if uid:
+        u_rec = db.query(UserRecord).filter(UserRecord.id == uid).first()
+        if u_rec:
+            user_email = u_rec.email
+    if not user_email:
+        u_latest = db.query(UserRecord).order_by(UserRecord.connected_at.desc()).first()
+        if u_latest:
+            user_email = u_latest.email
 
     # Mode: Open in Windows File Explorer
     if mode == "folder":
@@ -598,12 +605,59 @@ async def open_design_in_onenote(
                 raise HTTPException(status_code=500, detail=f"Failed to open explorer: {e}")
         raise HTTPException(status_code=404, detail="Local file could not be located on disk")
 
-    # Mode: OneNote Desktop Client Deep Link
-    if mode == "desktop":
+    # Mode: OneNote Desktop Client Deep Link (Exact Location)
+    if mode in ("desktop", "app"):
         desktop_url = design.get("onenote_client_url") or "onenote:"
+
+        # Locate exact local section backup (.one) file if present
+        backup_dir = os.path.expanduser(rf"~\AppData\Local\Microsoft\OneNote\16.0\Backup\{nb_name}")
+        section_file = None
+        if os.path.exists(backup_dir):
+            for f in os.listdir(backup_dir):
+                if f.lower().startswith(sec_name.lower()) and f.endswith(".one"):
+                    section_file = os.path.join(backup_dir, f)
+                    break
+
+        onenote_exe = r"C:\Program Files\Microsoft Office\Root\Office16\ONENOTE.EXE"
+        launched = False
+
+        # Priority 1: If local section file exists, open it directly (prevents d.docs.live.net cloud sync errors)
+        if section_file and os.path.exists(section_file):
+            desktop_url = f"onenote:{section_file}#{display_title}"
+            if os.path.exists(onenote_exe):
+                try:
+                    subprocess.Popen([onenote_exe, section_file])
+                    launched = True
+                except Exception as e:
+                    print(f"[OneNote Launch] section file error: {e}")
+
+        # Priority 2: Launch via ONENOTE.EXE /hyperlink
+        if not launched and os.path.exists(onenote_exe) and desktop_url and desktop_url.startswith("onenote:"):
+            try:
+                subprocess.Popen([onenote_exe, "/hyperlink", desktop_url])
+                launched = True
+            except Exception as e:
+                print(f"[OneNote Launch] /hyperlink error: {e}")
+
+        # Priority 3: Shell open
+        if not launched:
+            try:
+                os.startfile(desktop_url)
+                launched = True
+            except Exception:
+                if section_file and os.path.exists(section_file):
+                    os.startfile(section_file)
+                    launched = True
+
         if redirect:
             return RedirectResponse(url=desktop_url, status_code=302)
-        return {"status": "success", "client_url": desktop_url}
+        return {
+            "status": "success",
+            "message": f"Opened exact location in OneNote Desktop: {nb_name} > {sec_name} > {display_title}",
+            "client_url": desktop_url,
+            "section_file": section_file,
+            "hierarchy": f"{nb_name} > {sec_name} > {display_title}"
+        }
 
     # When redirect=False, return JSON location hierarchy metadata
     if not redirect:
@@ -615,13 +669,13 @@ async def open_design_in_onenote(
             "section_name": sec_name,
             "page_title": display_title,
             "hierarchy": f"{nb_name} > {sec_name} > {display_title}",
-            "onenote_web_url": design.get("onenote_web_url") or f"/api/designs/{design_id}/open-onenote",
+            "onenote_web_url": design.get("onenote_web_url") or f"/api/designs/{design_id}/open-onenote?mode=web",
             "onenote_client_url": design.get("onenote_client_url") or "onenote:",
             "local_path": local_path,
             "image_url": img_url
         }
 
-    # Direct Redirection: If design has authentic Microsoft OneNote Web URL, redirect directly to Microsoft!
+    # Mode: Web Redirection
     real_web_url = design.get("onenote_web_url")
     if real_web_url and (real_web_url.startswith("https://onedrive.live.com") or real_web_url.startswith("https://www.onenote.com") or real_web_url.startswith("https://")):
         return RedirectResponse(url=real_web_url, status_code=302)
@@ -636,6 +690,15 @@ async def open_design_in_onenote(
         user_email=user_email
     )
 
+@router.post("/{design_id}/open-onenote")
+async def open_design_in_onenote_post(
+    design_id: str,
+    mode: str = Query("desktop", pattern="^(desktop|web|app|folder)$"),
+    db: Session = Depends(get_db)
+):
+    """API endpoint to trigger launching OneNote Desktop to exact location without navigating away."""
+    return await open_design_in_onenote(design_id=design_id, mode=mode, redirect=False, db=db)
+
 @router.post("/{design_id}/open-local")
 async def open_local_design(design_id: str):
     """Opens and highlights the exact design file in Windows File Explorer."""
@@ -644,5 +707,5 @@ async def open_local_design(design_id: str):
 @router.get("/{design_id}/location")
 async def get_design_location(design_id: str):
     """Returns the full location hierarchy, deep links, and computer path for a design."""
-    return await open_design_in_onenote(design_id=design_id, mode="web", redirect=False)
+    return await open_design_in_onenote(design_id=design_id, mode="desktop", redirect=False)
 

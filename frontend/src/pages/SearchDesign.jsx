@@ -10,9 +10,10 @@ import {
   Image as ImageIcon, 
   RotateCcw, 
   Cpu, 
-  Laptop 
+  Laptop,
+  Globe
 } from 'lucide-react';
-import { api, getCleanOneNoteUrl, getCleanOneNoteClientUrl } from '../services/api';
+import { api, getCleanOneNoteUrl, getCleanOneNoteClientUrl, getCleanOneNoteWebUrl } from '../services/api';
 import OneNoteBreadcrumb from '../components/OneNoteBreadcrumb';
 import StructuralMapModal from '../components/StructuralMapModal';
 
@@ -371,25 +372,36 @@ export default function SearchDesign() {
                             </button>
 
                             <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
-                              <a 
-                                href={getCleanOneNoteUrl(match)} 
-                                target="_blank" 
-                                rel="noopener noreferrer"
+                              <button 
                                 className="btn-onenote"
                                 id={`btn-open-onenote-${match.id}`}
-                                title={`Open exact OneNote location: ${match.notebook_name} > ${match.section_name} > ${match.page_title || match.title}`}
+                                title={`Open exact location in Desktop OneNote: ${match.notebook_name} > ${match.section_name} > ${match.page_title || match.title}`}
+                                onClick={async (e) => {
+                                  e.preventDefault();
+                                  try {
+                                    const res = await api.openInOneNote(match.id, 'desktop');
+                                    if (res && res.client_url) {
+                                      window.location.href = res.client_url;
+                                    }
+                                  } catch (err) {
+                                    console.error('OneNote desktop launch error:', err);
+                                  }
+                                }}
+                                style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}
                               >
                                 <ExternalLink size={13} /> Open in OneNote
-                              </a>
+                              </button>
 
                               <a
-                                href={getCleanOneNoteClientUrl(match)}
+                                href={getCleanOneNoteWebUrl(match)}
+                                target="_blank"
+                                rel="noopener noreferrer"
                                 className="btn-secondary"
                                 style={{ padding: '6px 9px', fontSize: '0.75rem', display: 'inline-flex', alignItems: 'center', textDecoration: 'none' }}
-                                title="Open in OneNote Desktop App"
-                                id={`btn-open-client-${match.id}`}
+                                title="Open in OneNote Online (Browser)"
+                                id={`btn-open-web-${match.id}`}
                               >
-                                <Laptop size={13} />
+                                <Globe size={13} />
                               </a>
                             </div>
                           </div>

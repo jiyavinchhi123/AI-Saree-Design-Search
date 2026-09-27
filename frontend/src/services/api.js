@@ -42,41 +42,35 @@ const getHeaders = (extra = {}) => {
 };
 
 export const getCleanOneNoteUrl = (itemOrUrl, designId = null) => {
-  if (!itemOrUrl) {
-    if (designId) return `/api/designs/${designId}/open-onenote`;
-    return 'https://www.onenote.com';
-  }
-  
-  // If itemOrUrl is a design object or match
-  if (typeof itemOrUrl === 'object') {
-    const url = itemOrUrl.onenote_web_url;
-    // If it's an authentic Microsoft OneNote page URL (from Graph API), open it directly!
-    if (url && (url.startsWith('https://onedrive.live.com') || url.startsWith('https://www.onenote.com') || url.startsWith('https://d.docs.live.net'))) {
-      return url;
-    }
-    const id = itemOrUrl.id || itemOrUrl.design_id || itemOrUrl.top_match_id || designId;
-    if (id) {
-      return `/api/designs/${id}/open-onenote`;
-    }
-    return url || 'https://www.onenote.com';
-  }
+  const id = (typeof itemOrUrl === 'object' && itemOrUrl) 
+    ? (itemOrUrl.id || itemOrUrl.design_id || itemOrUrl.top_match_id) 
+    : designId;
 
-  // If itemOrUrl is a string URL
-  const url = String(itemOrUrl);
-  if (url.startsWith('https://onedrive.live.com') || url.startsWith('https://www.onenote.com') || url.startsWith('https://d.docs.live.net')) {
-    return url;
+  if (id) {
+    return `/api/designs/${id}/open-onenote?mode=desktop`;
   }
-  if (url.includes('/open-onenote')) {
-    return url;
+  if (typeof itemOrUrl === 'object' && itemOrUrl && itemOrUrl.onenote_client_url) {
+    return itemOrUrl.onenote_client_url;
   }
-  if (designId) {
-    return `/api/designs/${designId}/open-onenote`;
+  return 'onenote:';
+};
+
+export const getCleanOneNoteWebUrl = (itemOrUrl, designId = null) => {
+  if (typeof itemOrUrl === 'object' && itemOrUrl && itemOrUrl.onenote_web_url) {
+    return itemOrUrl.onenote_web_url;
   }
-  return url || 'https://www.onenote.com';
+  const id = (typeof itemOrUrl === 'object' && itemOrUrl) 
+    ? (itemOrUrl.id || itemOrUrl.design_id || itemOrUrl.top_match_id) 
+    : designId;
+
+  if (id) {
+    return `/api/designs/${id}/open-onenote?mode=web`;
+  }
+  return 'https://www.onenote.com';
 };
 
 export const getCleanOneNoteClientUrl = (itemOrUrl, designId = null) => {
-  if (typeof itemOrUrl === 'object') {
+  if (typeof itemOrUrl === 'object' && itemOrUrl) {
     if (itemOrUrl.onenote_client_url && itemOrUrl.onenote_client_url.startsWith('onenote:')) {
       return itemOrUrl.onenote_client_url;
     }
@@ -227,6 +221,18 @@ export const api = {
   },
 
   // OneNote & Local File Actions
+  openInOneNote: async (designId, mode = 'desktop') => {
+    const res = await fetch(`${API_BASE}/designs/${designId}/open-onenote?mode=${mode}`, {
+      method: 'POST',
+      headers: getHeaders(),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || 'Failed to open OneNote');
+    }
+    return res.json();
+  },
+
   openLocalFolder: async (designId) => {
     const res = await fetch(`${API_BASE}/designs/${designId}/open-local`, {
       method: 'POST',

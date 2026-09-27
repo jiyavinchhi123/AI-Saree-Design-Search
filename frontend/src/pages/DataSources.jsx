@@ -493,17 +493,23 @@ export default function DataSources() {
                     />
                   </td>
                   <td>
-                    {d.onenote_web_url ? (
-                      <a 
-                        href={getCleanOneNoteUrl(d)} 
-                        target="_blank" 
-                        rel="noreferrer" 
+                    {d.onenote_web_url || d.onenote_client_url ? (
+                      <button 
+                        onClick={async (e) => {
+                          e.preventDefault();
+                          try {
+                            const res = await api.openInOneNote(d.id, 'desktop');
+                            if (res && res.client_url) {
+                              window.location.href = res.client_url;
+                            }
+                          } catch (err) {}
+                        }}
                         className="btn-onenote"
-                        style={{ padding: '6px 12px', fontSize: '0.78rem' }}
-                        title="Open in Microsoft OneNote"
+                        style={{ padding: '6px 12px', fontSize: '0.78rem', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+                        title={`Open exact location in Desktop OneNote: ${d.notebook_name} > ${d.section_name} > ${d.page_title}`}
                       >
                         <ExternalLink size={12} /> Open in OneNote
-                      </a>
+                      </button>
                     ) : (
                       <span style={{ fontSize: '0.75rem', color: 'var(--text-dim)' }}>—</span>
                     )}

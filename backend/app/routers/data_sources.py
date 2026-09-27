@@ -309,8 +309,8 @@ def sync_local_onenote_backups(user_id: str, user_storage_dir: str, user_index, 
                             struct_path = os.path.join(user_storage_dir, prev_name)
                             cv2.imwrite(struct_path, structural_map)
 
-                            web_url = f"https://onedrive.live.com/redir.aspx?cid={user_id.upper()}&page=edit&resid={user_id.upper()}!1012&wd=target%28{clean_sec_name}.one%7CSaree%20designs%29"
-                            client_url = f"onenote:https://d.docs.live.net/{user_id.lower()}/OneNote%20Notebooks/{nb_dir_name}/{clean_sec_name}.one#Saree%20designs"
+                            web_url = f"https://onedrive.live.com/redir.aspx?cid={user_id.lower()}&resid=9b998637ec4520ec80b6f40300000000&wd=target%28{clean_sec_name}.one%7CSaree%20designs%29"
+                            client_url = f"onenote:{file_path}#Saree designs"
 
                             item_meta = {
                                 "id": design_id,
