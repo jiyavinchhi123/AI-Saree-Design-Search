@@ -1,0 +1,67 @@
+from pydantic import BaseModel, Field
+from typing import List, Optional, Dict, Any
+
+class SareeDesignBase(BaseModel):
+    title: str
+    notebook_name: str
+    section_name: str
+    page_title: str
+    onenote_web_url: Optional[str] = None
+    onenote_client_url: Optional[str] = None
+    category: Optional[str] = "Traditional"
+    colorway: Optional[str] = None
+    motifs: Optional[List[str]] = []
+    weave_type: Optional[str] = None
+
+class SareeDesignResponse(SareeDesignBase):
+    id: str
+    design_id: str
+    image_url: str
+    structural_preview_url: Optional[str] = None
+    similarity_score: Optional[float] = None
+    similarity_percentage: Optional[float] = None
+    is_match: Optional[bool] = None
+
+class SearchResponse(BaseModel):
+    is_strong_match: bool
+    status_message: str
+    top_score: float
+    top_percentage: float
+    threshold: float
+    query_image_url: str
+    query_structural_preview_url: str
+    matches: List[Dict[str, Any]]
+    total_indexed: int
+
+class SearchHistoryEntry(BaseModel):
+    id: str
+    timestamp: str
+    query_image_url: str
+    top_match_title: Optional[str] = None
+    top_match_image_url: Optional[str] = None
+    similarity_percentage: float
+    is_strong_match: bool
+    notebook_name: Optional[str] = None
+    section_name: Optional[str] = None
+    page_title: Optional[str] = None
+    onenote_web_url: Optional[str] = None
+
+class MicrosoftAuthConfig(BaseModel):
+    client_id: str
+    tenant_id: Optional[str] = "common"
+    client_secret: Optional[str] = None
+    redirect_uri: Optional[str] = "http://localhost:8000/api/onenote/auth/callback"
+
+class OneNoteSyncStatus(BaseModel):
+    is_configured: bool
+    is_connected: bool
+    user_id: Optional[str] = None
+    user_email: Optional[str] = None
+    display_name: Optional[str] = None
+    notebooks_count: int = 0
+    indexed_designs_count: int = 0
+    last_synced: Optional[str] = None
+
+class NotebookSyncRequest(BaseModel):
+    notebook_ids: Optional[List[str]] = None
+
