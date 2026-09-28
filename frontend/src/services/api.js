@@ -56,8 +56,13 @@ export const getCleanOneNoteUrl = (itemOrUrl, designId = null) => {
 };
 
 export const getCleanOneNoteWebUrl = (itemOrUrl, designId = null) => {
-  if (typeof itemOrUrl === 'object' && itemOrUrl && itemOrUrl.onenote_web_url) {
-    return itemOrUrl.onenote_web_url;
+  if (typeof itemOrUrl === 'object' && itemOrUrl) {
+    if (itemOrUrl.object_web_url) {
+      return itemOrUrl.object_web_url;
+    }
+    if (itemOrUrl.onenote_web_url) {
+      return itemOrUrl.onenote_web_url;
+    }
   }
   const id = (typeof itemOrUrl === 'object' && itemOrUrl) 
     ? (itemOrUrl.id || itemOrUrl.design_id || itemOrUrl.top_match_id) 
@@ -71,6 +76,9 @@ export const getCleanOneNoteWebUrl = (itemOrUrl, designId = null) => {
 
 export const getCleanOneNoteClientUrl = (itemOrUrl, designId = null) => {
   if (typeof itemOrUrl === 'object' && itemOrUrl) {
+    if (itemOrUrl.object_client_url && itemOrUrl.object_client_url.startsWith('onenote:')) {
+      return itemOrUrl.object_client_url;
+    }
     if (itemOrUrl.onenote_client_url && itemOrUrl.onenote_client_url.startsWith('onenote:')) {
       return itemOrUrl.onenote_client_url;
     }

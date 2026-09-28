@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
-import { BookOpen, Folder, FileText, ChevronRight, Copy, Check } from 'lucide-react';
+import { BookOpen, Folder, FileText, ChevronRight, Copy, Check, Image as ImageIcon } from 'lucide-react';
 
-export default function OneNoteBreadcrumb({ notebook, section, page }) {
+export default function OneNoteBreadcrumb({ notebook, section, page, imageOrder }) {
   const [copied, setCopied] = useState(false);
 
   // Clean RoboFlow suffixes or raw filename formatting if present
@@ -16,10 +16,13 @@ export default function OneNoteBreadcrumb({ notebook, section, page }) {
       .join(' ') || title;
   };
 
-  const cleanNb = notebook || 'Master Archive';
-  const cleanSec = section || 'General';
+  const cleanNb = notebook || 'My Notebook';
+  const cleanSec = section || 'Section';
   const cleanPg = formatTitle(page);
-  const fullPath = `${cleanNb} > ${cleanSec} > ${cleanPg}`;
+  const orderStr = imageOrder ? `Image #${imageOrder}` : null;
+  const fullPath = orderStr 
+    ? `${cleanNb} > ${cleanSec} > ${cleanPg} > ${orderStr}`
+    : `${cleanNb} > ${cleanSec} > ${cleanPg}`;
 
   const handleCopy = (e) => {
     e.stopPropagation();
@@ -30,31 +33,76 @@ export default function OneNoteBreadcrumb({ notebook, section, page }) {
   };
 
   return (
-    <div className="onenote-breadcrumb-container">
-      <div className="onenote-breadcrumb" title={`Location: ${fullPath}`}>
-        <div className="breadcrumb-part">
-          <BookOpen size={13} style={{ color: '#c084fc', flexShrink: 0 }} />
+    <div style={{
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      background: 'var(--bg-subtle)',
+      border: '1px solid var(--border-subtle)',
+      borderRadius: 'var(--radius-md)',
+      padding: '7px 10px',
+      fontSize: '0.74rem',
+      color: 'var(--text-secondary)',
+      marginBottom: '10px',
+      gap: '8px'
+    }}>
+      <div 
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '5px',
+          flexWrap: 'wrap',
+          minWidth: 0
+        }}
+        title={`Exact Location: ${fullPath}`}
+      >
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontWeight: 600, color: 'var(--primary-purple)' }}>
+          <BookOpen size={13} style={{ color: 'var(--primary-purple)', flexShrink: 0 }} />
           <span>{cleanNb}</span>
-        </div>
+        </span>
         <ChevronRight size={11} style={{ color: 'var(--text-dim)', flexShrink: 0 }} />
-        <div className="breadcrumb-part">
-          <Folder size={13} style={{ color: '#d4af37', flexShrink: 0 }} />
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontWeight: 600, color: 'var(--gold-primary)' }}>
+          <Folder size={13} style={{ color: 'var(--gold-primary)', flexShrink: 0 }} />
           <span>{cleanSec}</span>
-        </div>
+        </span>
         <ChevronRight size={11} style={{ color: 'var(--text-dim)', flexShrink: 0 }} />
-        <div className="breadcrumb-part active">
-          <FileText size={13} style={{ color: '#38bdf8', flexShrink: 0 }} />
-          <span title={cleanPg}>{cleanPg}</span>
-        </div>
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontWeight: 600, color: 'var(--text-main)', maxWidth: '140px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          <FileText size={13} style={{ color: '#2563eb', flexShrink: 0 }} />
+          <span>{cleanPg}</span>
+        </span>
+        {orderStr && (
+          <>
+            <ChevronRight size={11} style={{ color: 'var(--text-dim)', flexShrink: 0 }} />
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontWeight: 700, color: 'var(--gold-text)', background: 'var(--gold-light)', padding: '1px 6px', borderRadius: '4px' }}>
+              <ImageIcon size={11} style={{ color: 'var(--gold-primary)', flexShrink: 0 }} />
+              <span>{orderStr}</span>
+            </span>
+          </>
+        )}
       </div>
+
       <button 
         type="button"
-        className="btn-copy-location"
         onClick={handleCopy}
-        title="Copy exact OneNote hierarchy location"
+        title="Copy full OneNote location hierarchy"
+        style={{
+          background: copied ? 'var(--emerald-light)' : '#ffffff',
+          border: '1px solid',
+          borderColor: copied ? 'var(--emerald-border)' : 'var(--border-subtle)',
+          borderRadius: '4px',
+          padding: '3px 6px',
+          color: copied ? 'var(--accent-emerald)' : 'var(--text-muted)',
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: '4px',
+          fontSize: '0.68rem',
+          fontWeight: 600,
+          cursor: 'pointer',
+          flexShrink: 0
+        }}
       >
-        {copied ? <Check size={11} style={{ color: '#10b981' }} /> : <Copy size={11} />}
-        {copied && <span className="copy-feedback">Copied!</span>}
+        {copied ? <Check size={11} /> : <Copy size={11} />}
+        {copied && <span>Copied</span>}
       </button>
     </div>
   );

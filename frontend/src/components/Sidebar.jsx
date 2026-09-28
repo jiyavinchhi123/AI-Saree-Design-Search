@@ -2,16 +2,15 @@ import React, { useState, useEffect } from 'react';
 import { 
   LayoutDashboard, 
   Search, 
-  Database, 
   History, 
   Layers, 
   Sparkles, 
-  RefreshCw,
-  ExternalLink
+  X,
+  BookOpen
 } from 'lucide-react';
 import { api } from '../services/api';
 
-export default function Sidebar({ activeTab, setActiveTab }) {
+export default function Sidebar({ activeTab, setActiveTab, mobileNavOpen, setMobileNavOpen }) {
   const [oneNoteStatus, setOneNoteStatus] = useState(null);
 
   useEffect(() => {
@@ -25,32 +24,52 @@ export default function Sidebar({ activeTab, setActiveTab }) {
       const data = await api.getOneNoteStatus();
       setOneNoteStatus(data);
     } catch (e) {
-      console.error(e);
+      console.error('Sidebar status load error:', e);
     }
   };
 
   const navItems = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { id: 'search', label: 'Search Design', icon: Search },
-    { id: 'data-sources', label: 'Data Sources & OneNote', icon: Database },
+    { id: 'data-sources', label: 'OneNote Integration', icon: BookOpen },
     { id: 'history', label: 'Search History', icon: History },
   ];
 
   return (
-    <aside className="app-sidebar" id="main-sidebar">
+    <aside 
+      className={`app-sidebar ${mobileNavOpen ? 'mobile-open' : ''}`} 
+      id="main-sidebar"
+    >
       {/* Brand Header */}
       <div className="brand-section">
-        <div className="brand-icon-box">
-          <Layers size={24} />
+        <div className="brand-icon-box" title="AI Saree Design Search">
+          <Layers size={22} />
         </div>
-        <div>
+        <div style={{ flex: 1 }}>
           <div className="brand-title">AI Saree Search</div>
           <div className="brand-subtitle">OneNote Visual Intel</div>
         </div>
+
+        {/* Close Button on Mobile Drawer */}
+        {setMobileNavOpen && (
+          <button 
+            className="mobile-close-btn"
+            onClick={() => setMobileNavOpen(false)}
+            aria-label="Close Navigation"
+            style={{
+              display: 'none',
+              background: 'transparent',
+              color: 'var(--text-muted)',
+              padding: '6px'
+            }}
+          >
+            <X size={20} />
+          </button>
+        )}
       </div>
 
-      {/* Navigation */}
-      <nav className="nav-menu">
+      {/* Navigation Items */}
+      <nav className="nav-menu" aria-label="Main Navigation">
         {navItems.map((item) => {
           const Icon = item.icon;
           const isActive = activeTab === item.id;
@@ -61,7 +80,7 @@ export default function Sidebar({ activeTab, setActiveTab }) {
               className={`nav-item ${isActive ? 'active' : ''}`}
               onClick={() => setActiveTab(item.id)}
             >
-              <Icon size={18} />
+              <Icon size={19} />
               <span>{item.label}</span>
             </button>
           );
@@ -69,20 +88,26 @@ export default function Sidebar({ activeTab, setActiveTab }) {
       </nav>
 
       {/* OneNote Status Card */}
-      <div className="sidebar-onenote-badge" id="onenote-status-badge">
+      <div 
+        className="sidebar-onenote-badge" 
+        id="onenote-status-badge"
+        onClick={() => setActiveTab('data-sources')}
+        style={{ cursor: 'pointer' }}
+        title="View Microsoft OneNote Integration & Sync Details"
+      >
         <div className="badge-header">
           <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <Sparkles size={14} color="#d8b4fe" /> OneNote Sync
+            <Sparkles size={14} style={{ color: 'var(--primary-purple)' }} /> OneNote Sync
           </span>
-          <span style={{ fontSize: '0.7rem', color: '#c084fc' }}>
+          <span style={{ fontSize: '0.74rem', color: 'var(--primary-purple)', fontWeight: 800 }}>
             {oneNoteStatus?.indexed_designs_count || 0} designs
           </span>
         </div>
         <div className="badge-status">
           <div className={`status-dot ${oneNoteStatus?.is_connected ? '' : 'inactive'}`} />
-          <span>
+          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {oneNoteStatus?.is_connected 
-              ? `Connected (${oneNoteStatus.user_email || 'Active'})`
+              ? (oneNoteStatus.display_name || oneNoteStatus.user_email || 'Connected')
               : 'Not Connected'}
           </span>
         </div>

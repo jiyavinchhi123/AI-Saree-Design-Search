@@ -1,85 +1,120 @@
 import React, { useState, useEffect } from 'react';
-import { Cpu, BookOpen } from 'lucide-react';
+import { Cpu, BookOpen, Menu, Sparkles, CheckCircle2 } from 'lucide-react';
 import { api } from '../services/api';
 
-export default function Navbar({ activeTab, setActiveTab }) {
+export default function Navbar({ activeTab, setActiveTab, mobileNavOpen, setMobileNavOpen }) {
   const [oneNoteStatus, setOneNoteStatus] = useState(null);
 
   useEffect(() => {
-    api.getOneNoteStatus().then(status => {
-      setOneNoteStatus(status);
-    }).catch(() => {});
+    api.getOneNoteStatus()
+      .then(status => setOneNoteStatus(status))
+      .catch(() => {});
   }, [activeTab]);
 
   const getPageTitle = () => {
     switch (activeTab) {
-      case 'dashboard': return 'Executive Overview';
+      case 'dashboard': return 'Dashboard Overview';
       case 'search': return 'Visual Saree Search';
       case 'data-sources': return 'OneNote Integration & Sync';
-      case 'history': return 'Search Audits & History';
-      default: return 'Enterprise Visual Retrieval';
+      case 'history': return 'Search History & Audits';
+      default: return 'AI Saree Search';
+    }
+  };
+
+  const getPageSubtitle = () => {
+    switch (activeTab) {
+      case 'dashboard': return 'Find. Reuse. Preserve. • Enterprise Textile Design Intelligence';
+      case 'search': return 'Deep Vision Motif Matching • Color-Invariant Spatial Neural Net';
+      case 'data-sources': return 'Real-Time Microsoft OneNote Notebook Synchronization';
+      case 'history': return 'Audit Logs of Uploaded Saree Design Queries';
+      default: return 'Enterprise Visual Intelligence';
     }
   };
 
   return (
     <header className="top-header" id="top-navbar">
-      <div className="header-title-block">
-        <h1>{getPageTitle()}</h1>
-        <p>AI Saree Design Search &bull; Real-Time Microsoft OneNote Visual Engine</p>
+      <div className="header-left">
+        {/* Hamburger Menu Toggle on Mobile */}
+        <button 
+          className="mobile-menu-toggle"
+          onClick={() => setMobileNavOpen(!mobileNavOpen)}
+          aria-label="Toggle Navigation Menu"
+        >
+          <Menu size={20} />
+        </button>
+
+        <div className="header-title-block">
+          <h1>{getPageTitle()}</h1>
+          <p>{getPageSubtitle()}</p>
+        </div>
       </div>
 
-      <div className="header-actions" style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+      <div className="header-actions">
+        {/* Microsoft OneNote Account Connection Pill */}
         {oneNoteStatus?.is_connected ? (
-          <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '8px',
-            background: 'rgba(16, 185, 129, 0.12)',
-            border: '1px solid rgba(16, 185, 129, 0.35)',
-            borderRadius: '20px',
-            padding: '5px 14px',
-            fontSize: '0.78rem',
-            color: '#10b981'
-          }}>
-            <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#10b981', boxShadow: '0 0 6px #10b981' }} />
-            <span>{oneNoteStatus.display_name || oneNoteStatus.user_email}</span>
-            <span style={{ opacity: 0.6, fontSize: '0.7rem' }}>• {oneNoteStatus.indexed_designs_count} designs</span>
+          <div 
+            onClick={() => setActiveTab('data-sources')}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '8px',
+              background: 'var(--emerald-light)',
+              border: '1px solid var(--emerald-border)',
+              borderRadius: 'var(--radius-full)',
+              padding: '6px 14px',
+              fontSize: '0.80rem',
+              color: 'var(--accent-emerald)',
+              fontWeight: 600,
+              cursor: 'pointer'
+            }}
+            title="Microsoft OneNote Connected"
+          >
+            <CheckCircle2 size={14} style={{ color: 'var(--accent-emerald)' }} />
+            <span style={{ maxWidth: '140px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {oneNoteStatus.display_name || oneNoteStatus.user_email}
+            </span>
+            <span style={{ fontSize: '0.74rem', opacity: 0.8, color: '#047857' }}>
+              • {oneNoteStatus.indexed_designs_count} designs
+            </span>
           </div>
         ) : (
           <div 
-            onClick={() => setActiveTab && setActiveTab('data-sources')}
+            onClick={() => setActiveTab('data-sources')}
             style={{
-              display: 'flex',
+              display: 'inline-flex',
               alignItems: 'center',
               gap: '6px',
-              background: 'rgba(212, 175, 55, 0.1)',
-              border: '1px solid rgba(212, 175, 55, 0.3)',
-              borderRadius: '20px',
-              padding: '5px 14px',
-              fontSize: '0.78rem',
-              color: 'var(--gold-light)',
+              background: 'var(--purple-light)',
+              border: '1px solid var(--purple-border)',
+              borderRadius: 'var(--radius-full)',
+              padding: '6px 14px',
+              fontSize: '0.80rem',
+              color: 'var(--primary-purple)',
+              fontWeight: 600,
               cursor: 'pointer'
             }}
-            title="Click to connect Microsoft OneNote"
+            title="Connect Microsoft OneNote"
           >
-            <BookOpen size={13} style={{ color: 'var(--gold-primary)' }} />
-            <span>Connect Microsoft OneNote</span>
+            <BookOpen size={14} />
+            <span>Connect OneNote</span>
           </div>
         )}
 
+        {/* AI Engine Status Pill */}
         <div style={{
-          display: 'flex',
+          display: 'inline-flex',
           alignItems: 'center',
-          gap: '8px',
-          background: 'rgba(212, 175, 55, 0.08)',
-          border: '1px solid var(--border-active)',
-          borderRadius: '20px',
+          gap: '7px',
+          background: 'var(--gold-light)',
+          border: '1px solid var(--gold-border)',
+          borderRadius: 'var(--radius-full)',
           padding: '6px 14px',
           fontSize: '0.78rem',
-          color: 'var(--gold-light)'
+          color: 'var(--gold-text)',
+          fontWeight: 700
         }}>
-          <Cpu size={14} style={{ color: 'var(--gold-primary)' }} />
-          <span>Color-Invariant AI Active</span>
+          <Sparkles size={14} style={{ color: 'var(--gold-primary)' }} />
+          <span>Color-Invariant AI</span>
         </div>
       </div>
     </header>

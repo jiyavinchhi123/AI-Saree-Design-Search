@@ -6,6 +6,14 @@ class SareeDesignBase(BaseModel):
     notebook_name: str
     section_name: str
     page_title: str
+    page_id: Optional[str] = None
+    object_id: Optional[str] = None
+    image_order: Optional[int] = 1
+    image_position: Optional[str] = "Position #1 on page"
+    resource_id: Optional[str] = None
+    resource_url: Optional[str] = None
+    object_client_url: Optional[str] = None
+    object_web_url: Optional[str] = None
     onenote_web_url: Optional[str] = None
     onenote_client_url: Optional[str] = None
     category: Optional[str] = "Traditional"
@@ -44,6 +52,10 @@ class SearchHistoryEntry(BaseModel):
     notebook_name: Optional[str] = None
     section_name: Optional[str] = None
     page_title: Optional[str] = None
+    top_match_page_id: Optional[str] = None
+    top_match_object_id: Optional[str] = None
+    top_match_object_url: Optional[str] = None
+    top_match_order: Optional[int] = None
     onenote_web_url: Optional[str] = None
 
 class MicrosoftAuthConfig(BaseModel):

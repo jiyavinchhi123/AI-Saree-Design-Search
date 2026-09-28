@@ -32,7 +32,11 @@ async def get_search_history(
             "notebook_name": r.notebook_name,
             "section_name": r.section_name,
             "page_title": r.page_title,
-            "onenote_web_url": r.onenote_web_url
+            "top_match_order": r.top_match_order,
+            "top_match_page_id": r.top_match_page_id,
+            "top_match_object_id": r.top_match_object_id,
+            "top_match_object_url": r.top_match_object_url,
+            "onenote_web_url": r.onenote_web_url or r.top_match_object_url
         })
     return {"total": len(history_list), "history": history_list}
 

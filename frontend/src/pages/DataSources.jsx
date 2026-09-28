@@ -12,7 +12,13 @@ import {
   LogOut, 
   Layers, 
   ShieldCheck, 
-  ChevronRight 
+  ChevronRight,
+  Folder,
+  FileText,
+  Clock,
+  Search,
+  KeyRound,
+  X
 } from 'lucide-react';
 import { api, getCleanOneNoteUrl } from '../services/api';
 import OneNoteBreadcrumb from '../components/OneNoteBreadcrumb';
@@ -39,6 +45,8 @@ export default function DataSources() {
 
   // Catalog Table State
   const [designs, setDesigns] = useState([]);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState('all');
 
   const loadNotebooks = useCallback(async () => {
     setIsLoadingNotebooks(true);
@@ -66,7 +74,7 @@ export default function DataSources() {
       const catalogData = await api.getDesigns();
       setDesigns(catalogData.designs || []);
     } catch (e) {
-      console.error(e);
+      console.error('Error loading data sources:', e);
     }
   }, [loadNotebooks]);
 
@@ -101,495 +109,586 @@ export default function DataSources() {
 
   const handleStartDeviceLogin = async () => {
     try {
-      setNotification(null);
-      const res = await api.startDeviceLogin();
+      setNotification({ type: 'info', message: 'Requesting Microsoft Device Code...' });
+      const flow = await api.startDeviceLogin();
       setDeviceLogin({
         isOpen: true,
-        sessionId: res.session_id || 'default',
-        userCode: res.user_code,
-        verificationUri: res.verification_uri || 'https://microsoft.com/devicelogin',
+        sessionId: flow.session_id,
+        userCode: flow.user_code,
+        verificationUri: flow.verification_uri || 'https://microsoft.com/devicelogin',
         isPolling: true,
-        message: res.message,
+        message: flow.message || 'Enter code on Microsoft device login page',
         copied: false
       });
 
-      if (pollingRef.current) clearInterval(pollingRef.current);
+      // Poll for authorization completion
       pollingRef.current = setInterval(async () => {
         try {
-          const comp = await api.completeDeviceLogin(res.session_id);
-          if (comp.status === 'success') {
-            if (pollingRef.current) clearInterval(pollingRef.current);
+          const res = await api.completeDeviceLogin(flow.session_id);
+          if (res.status === 'success') {
+            clearInterval(pollingRef.current);
             pollingRef.current = null;
             setDeviceLogin(prev => ({ ...prev, isOpen: false, isPolling: false }));
-            setNotification({ 
-              type: 'success', 
-              message: `Connected successfully as ${comp.user?.displayName || 'User'}!` 
-            });
-            await loadData();
+            setNotification({ type: 'success', message: 'Connected successfully to Microsoft OneNote!' });
+            loadData();
           }
-        } catch (pollErr) {
-          // Keep polling until user authorizes on microsoft.com/devicelogin
+        } catch {
+          // Keep polling until user completes on browser
         }
-      }, 5000);
+      }, 4000);
     } catch (err) {
-      setNotification({ type: 'error', message: err.message || 'Failed to start device login' });
-    }
-  };
-
-  const handleCheckDeviceLoginStatus = async () => {
-    try {
-      const comp = await api.completeDeviceLogin(deviceLogin.sessionId);
-      if (comp.status === 'success') {
-        if (pollingRef.current) clearInterval(pollingRef.current);
-        pollingRef.current = null;
-        setDeviceLogin(prev => ({ ...prev, isOpen: false, isPolling: false }));
-        setNotification({ 
-          type: 'success', 
-          message: `Connected successfully as ${comp.user?.displayName || 'User'}!` 
-        });
-        await loadData();
-      } else {
-        setNotification({ type: 'info', message: 'Waiting for sign-in approval on microsoft.com/devicelogin...' });
-      }
-    } catch (err) {
-      setNotification({ type: 'error', message: err.message || 'Sign-in still pending' });
-    }
-  };
-
-  const handleCopyCode = () => {
-    if (deviceLogin.userCode) {
-      navigator.clipboard.writeText(deviceLogin.userCode);
-      setDeviceLogin(prev => ({ ...prev, copied: true }));
-      setTimeout(() => setDeviceLogin(prev => ({ ...prev, copied: false })), 2000);
+      setNotification({ type: 'error', message: err.message || 'Device login failed' });
     }
   };
 
   const handleDisconnect = async () => {
-    if (!window.confirm('Disconnect your Microsoft OneNote account?')) return;
-    try {
-      await api.disconnectOneNote();
-      setOneNoteStatus(null);
-      setNotebooks([]);
-      setDesigns([]);
-      setNotification({ type: 'info', message: 'OneNote account disconnected.' });
-      loadData();
-    } catch (e) {
-      setNotification({ type: 'error', message: 'Failed to disconnect' });
+    if (window.confirm('Disconnect your Microsoft OneNote account from this workspace?')) {
+      try {
+        await api.disconnectOneNote();
+        setOneNoteStatus(null);
+        setNotebooks([]);
+        setNotification({ type: 'info', message: 'Microsoft account disconnected' });
+        loadData();
+      } catch (err) {
+        setNotification({ type: 'error', message: 'Failed to disconnect account' });
+      }
     }
   };
 
-  const toggleNotebookSelection = (id) => {
-    setSelectedNotebookIds(prev => 
-      prev.includes(id) ? prev.filter(item => item !== id) : [...prev, id]
-    );
-  };
-
-  const handleSyncNow = async () => {
+  const handleSyncNotebooks = async () => {
     setIsSyncing(true);
-    setNotification(null);
+    setNotification({ type: 'info', message: 'Scanning OneNote pages & extracting saree design embeddings...' });
     try {
-      const res = await api.syncOneNote(selectedNotebookIds.length > 0 ? selectedNotebookIds : null);
-      setNotification({
-        type: 'success',
-        message: res.message || `Indexed ${res.indexed_count || 0} saree images across ${res.pages_scanned || 0} pages.`
+      const res = await api.syncOneNoteNotebooks(selectedNotebookIds);
+      setNotification({ 
+        type: 'success', 
+        message: res.message || `Successfully synced ${res.indexed_count || 0} designs from OneNote!` 
       });
-      await loadData();
+      loadData();
     } catch (err) {
-      setNotification({ type: 'error', message: err.message || 'OneNote sync failed' });
+      setNotification({ type: 'error', message: err.message || 'Synchronization failed' });
     } finally {
       setIsSyncing(false);
     }
   };
 
-  const handleClearCatalog = async () => {
-    if (!window.confirm('Clear all indexed saree designs from your local catalog?')) return;
-    try {
-      await api.clearAllDesigns();
-      setNotification({ type: 'info', message: 'Catalog cleared.' });
-      loadData();
-    } catch (err) {
-      setNotification({ type: 'error', message: 'Failed to clear catalog' });
-    }
+  const handleToggleNotebook = (nbId) => {
+    setSelectedNotebookIds(prev => 
+      prev.includes(nbId) ? prev.filter(id => id !== nbId) : [...prev, nbId]
+    );
   };
+
+  // Filter catalog items
+  const filteredDesigns = designs.filter(d => {
+    const matchesSearch = !searchQuery || 
+      (d.title && d.title.toLowerCase().includes(searchQuery.toLowerCase())) ||
+      (d.notebook_name && d.notebook_name.toLowerCase().includes(searchQuery.toLowerCase())) ||
+      (d.section_name && d.section_name.toLowerCase().includes(searchQuery.toLowerCase()));
+    const matchesCat = selectedCategory === 'all' || d.category === selectedCategory;
+    return matchesSearch && matchesCat;
+  });
+
+  const uniqueCategories = ['all', ...new Set(designs.map(d => d.category).filter(Boolean))];
 
   return (
     <div className="page-container" id="data-sources-page">
-      <div style={{ marginBottom: '28px' }}>
-        <h2 style={{ fontSize: '1.65rem', color: '#fff', display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <BookOpen size={26} style={{ color: 'var(--gold-primary)' }} /> Real-Time Microsoft OneNote Integration
-        </h2>
-        <p style={{ color: 'var(--text-muted)', fontSize: '0.88rem', marginTop: '4px' }}>
-          Connect your personal or enterprise Microsoft account. Select your notebooks to ingest saree designs and search them with Color-Invariant AI.
-        </p>
-      </div>
-
+      {/* Notifications */}
       {notification && (
         <div style={{
-          padding: '14px 20px',
+          padding: '14px 18px',
           borderRadius: 'var(--radius-md)',
           marginBottom: '24px',
-          background: notification.type === 'success' ? 'rgba(16, 185, 129, 0.15)' : 'rgba(239, 68, 68, 0.15)',
-          border: `1px solid ${notification.type === 'success' ? 'var(--accent-emerald)' : 'var(--accent-crimson)'}`,
-          color: notification.type === 'success' ? '#a7f3d0' : '#fca5a5',
-          fontSize: '0.88rem',
           display: 'flex',
           alignItems: 'center',
-          gap: '10px'
+          justifyContent: 'space-between',
+          background: notification.type === 'error' ? 'var(--crimson-light)' : notification.type === 'success' ? 'var(--emerald-light)' : 'var(--purple-light)',
+          border: `1px solid ${notification.type === 'error' ? 'var(--crimson-border)' : notification.type === 'success' ? 'var(--emerald-border)' : 'var(--purple-border)'}`,
+          color: notification.type === 'error' ? 'var(--accent-crimson)' : notification.type === 'success' ? 'var(--accent-emerald)' : 'var(--primary-purple)',
+          fontSize: '0.88rem',
+          fontWeight: 600
         }}>
-          {notification.type === 'success' ? <CheckCircle2 size={18} /> : <AlertCircle size={18} />}
-          <span>{notification.message}</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            {notification.type === 'error' ? <AlertCircle size={18} /> : <CheckCircle2 size={18} />}
+            <span>{notification.message}</span>
+          </div>
+          <button 
+            onClick={() => setNotification(null)}
+            style={{ background: 'transparent', color: 'inherit', padding: '4px' }}
+          >
+            <X size={16} />
+          </button>
         </div>
       )}
 
-      {/* Main Connection & Profile Section */}
-      <div style={{ display: 'grid', gridTemplateColumns: oneNoteStatus?.is_connected ? '1.1fr 1fr' : '1fr', gap: '24px', marginBottom: '32px' }}>
-        
+      {/* 1. READ-ONLY SECURITY EXPLANATION CARD */}
+      <div style={{
+        background: 'linear-gradient(135deg, #ffffff 0%, #faf8ff 100%)',
+        border: '1px solid var(--purple-border)',
+        borderRadius: 'var(--radius-xl)',
+        padding: '22px 26px',
+        marginBottom: '28px',
+        display: 'flex',
+        alignItems: 'center',
+        gap: '18px',
+        boxShadow: 'var(--shadow-sm)'
+      }}>
+        <div style={{
+          width: '46px',
+          height: '46px',
+          borderRadius: 'var(--radius-md)',
+          background: 'var(--purple-light)',
+          color: 'var(--primary-purple)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          flexShrink: 0
+        }}>
+          <ShieldCheck size={26} />
+        </div>
+        <div style={{ flex: 1 }}>
+          <h4 style={{ fontSize: '1.05rem', color: 'var(--text-main)', marginBottom: '4px' }}>
+            Enterprise Read-Only Security Assurance
+          </h4>
+          <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', lineHeight: '1.5' }}>
+            The AI Saree Design Search engine only requests <code style={{ background: 'var(--purple-light)', color: 'var(--primary-purple)', padding: '2px 6px', borderRadius: '4px' }}>Notes.Read</code> and <code style={{ background: 'var(--purple-light)', color: 'var(--primary-purple)', padding: '2px 6px', borderRadius: '4px' }}>User.Read</code> permissions from Microsoft Graph. Your original OneNote notebooks, sections, and pages are <strong>never modified, edited, or deleted</strong>. All image embeddings are stored securely in your private tenant index.
+          </p>
+        </div>
+      </div>
+
+      {/* 2. MICROSOFT ONENOTE CONNECTION & STATUS */}
+      <div style={{ 
+        display: 'grid', 
+        gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', 
+        gap: '24px', 
+        marginBottom: '32px' 
+      }}>
         {/* Account Status Card */}
-        <div className="upload-card" style={{ margin: 0, padding: '24px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '18px' }}>
+        <div className="saas-card" id="card-onenote-account">
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-              <div style={{ 
-                width: '44px', 
-                height: '44px', 
-                borderRadius: '8px', 
-                background: 'linear-gradient(135deg, #7719aa, #9b30ff)', 
-                display: 'flex', 
-                alignItems: 'center', 
-                justifyContent: 'center', 
-                color: '#fff',
-                fontWeight: 800,
-                fontSize: '22px'
+              <div style={{
+                width: '42px',
+                height: '42px',
+                borderRadius: 'var(--radius-md)',
+                background: 'linear-gradient(135deg, #7c3aed 0%, #581c87 100%)',
+                color: '#ffffff',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                boxShadow: '0 4px 10px rgba(124, 58, 237, 0.25)'
               }}>
-                N
+                <BookOpen size={22} />
               </div>
               <div>
-                <h3 style={{ fontSize: '1.2rem', color: '#fff' }}>Microsoft OneNote Account</h3>
-                <span style={{ fontSize: '0.78rem', color: 'var(--text-dim)', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                  <ShieldCheck size={13} style={{ color: '#10b981' }} /> Strictly Read-Only (Notes.Read)
-                </span>
+                <h3 style={{ fontSize: '1.15rem', color: 'var(--text-main)' }}>Microsoft OneNote</h3>
+                <p style={{ fontSize: '0.80rem', color: 'var(--text-muted)' }}>Graph API OAuth 2.0 Integration</p>
               </div>
             </div>
-            <div className={`status-dot ${oneNoteStatus?.is_connected ? '' : 'inactive'}`} title={oneNoteStatus?.is_connected ? 'Connected' : 'Not Connected'} />
+
+            <span style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              padding: '5px 12px',
+              borderRadius: 'var(--radius-full)',
+              fontSize: '0.78rem',
+              fontWeight: 700,
+              background: oneNoteStatus?.is_connected ? 'var(--emerald-light)' : 'var(--gold-light)',
+              color: oneNoteStatus?.is_connected ? 'var(--accent-emerald)' : 'var(--gold-text)',
+              border: `1px solid ${oneNoteStatus?.is_connected ? 'var(--emerald-border)' : 'var(--gold-border)'}`
+            }}>
+              <span className={`status-dot ${oneNoteStatus?.is_connected ? '' : 'inactive'}`} />
+              {oneNoteStatus?.is_connected ? 'Connected' : 'Disconnected'}
+            </span>
           </div>
 
-          {!oneNoteStatus?.is_connected ? (
-            <div>
-              <p style={{ fontSize: '0.88rem', color: 'var(--text-muted)', lineHeight: '1.6', marginBottom: '20px' }}>
-                Sign in with your Microsoft account (e.g. <strong>@outlook.com, @hotmail.com, @gmail.com</strong> or enterprise Office 365) to let AI access your saree design pages.
-              </p>
-
-              <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
-                <button 
-                  id="btn-device-login-onenote"
-                  className="btn-primary" 
-                  onClick={handleStartDeviceLogin}
-                  style={{ padding: '12px 20px', fontSize: '0.9rem', flex: 1, justifyContent: 'center' }}
-                >
-                  <Sparkles size={16} /> Connect Microsoft OneNote (1-Click)
-                </button>
-                <button 
-                  id="btn-oauth-login-onenote"
-                  className="btn-secondary" 
-                  onClick={handleDirectOAuthLogin}
-                  style={{ padding: '12px 18px', fontSize: '0.85rem' }}
-                >
-                  <ExternalLink size={14} /> Direct Web Login
-                </button>
-              </div>
-            </div>
-          ) : (
+          {oneNoteStatus?.is_connected ? (
             <div>
               <div style={{ 
-                background: 'rgba(255, 255, 255, 0.03)', 
-                border: '1px solid var(--border-subtle)', 
-                borderRadius: '8px', 
+                background: 'var(--bg-subtle)', 
+                borderRadius: 'var(--radius-md)', 
                 padding: '16px', 
-                marginBottom: '18px' 
+                marginBottom: '20px' 
               }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', fontSize: '0.85rem' }}>
-                  <span style={{ color: 'var(--text-dim)' }}>Signed In As:</span>
-                  <strong style={{ color: '#fff' }}>{oneNoteStatus.display_name || 'Microsoft User'}</strong>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '10px' }}>
+                  <span style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>Account Name:</span>
+                  <strong style={{ fontSize: '0.84rem', color: 'var(--text-main)' }}>
+                    {oneNoteStatus.display_name || 'Microsoft User'}
+                  </strong>
                 </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', fontSize: '0.85rem' }}>
-                  <span style={{ color: 'var(--text-dim)' }}>Account Email:</span>
-                  <strong style={{ color: 'var(--gold-light)' }}>{oneNoteStatus.user_email}</strong>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '10px' }}>
+                  <span style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>Account Email:</span>
+                  <strong style={{ fontSize: '0.84rem', color: 'var(--primary-purple)' }}>
+                    {oneNoteStatus.user_email}
+                  </strong>
                 </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', fontSize: '0.85rem' }}>
-                  <span style={{ color: 'var(--text-dim)' }}>Indexed Saree Designs:</span>
-                  <strong style={{ color: '#10b981' }}>{oneNoteStatus.indexed_designs_count || 0} designs</strong>
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem' }}>
-                  <span style={{ color: 'var(--text-dim)' }}>Last Synced:</span>
-                  <span style={{ color: 'var(--text-muted)' }}>
-                    {oneNoteStatus.last_synced ? new Date(oneNoteStatus.last_synced).toLocaleString() : 'Never synced'}
-                  </span>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>Indexed Designs:</span>
+                  <strong style={{ fontSize: '0.84rem', color: 'var(--accent-emerald)' }}>
+                    {oneNoteStatus.indexed_designs_count} designs
+                  </strong>
                 </div>
               </div>
 
-              <div style={{ display: 'flex', gap: '10px' }}>
+              <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
                 <button 
-                  id="btn-sync-onenote-top"
+                  id="btn-sync-onenote"
                   className="btn-primary" 
-                  onClick={handleSyncNow}
+                  onClick={handleSyncNotebooks}
                   disabled={isSyncing}
-                  style={{ flex: 1, justifyContent: 'center' }}
+                  style={{ flex: 1, minWidth: '160px' }}
                 >
-                  <RefreshCw size={15} className={isSyncing ? 'spin' : ''} /> {isSyncing ? 'Scanning & Ingesting...' : 'Sync Notebooks Now'}
+                  <RefreshCw size={16} className={isSyncing ? 'spinner' : ''} />
+                  <span>{isSyncing ? 'Syncing Pages...' : 'Sync Notebooks'}</span>
                 </button>
                 <button 
                   id="btn-disconnect-onenote"
                   className="btn-secondary" 
                   onClick={handleDisconnect}
-                  title="Switch or Disconnect Microsoft account"
-                  style={{ color: '#fca5a5' }}
+                  style={{ color: 'var(--accent-crimson)', borderColor: '#fca5a5' }}
                 >
-                  <LogOut size={14} /> Disconnect
+                  <LogOut size={15} /> Disconnect
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div>
+              <p style={{ fontSize: '0.88rem', color: 'var(--text-secondary)', lineHeight: '1.6', marginBottom: '22px' }}>
+                Sign in with any personal or work Microsoft account to automatically index saree designs from your digital OneNote notebooks.
+              </p>
+
+              <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+                <button 
+                  id="btn-connect-onenote"
+                  className="btn-primary" 
+                  onClick={handleDirectOAuthLogin}
+                  style={{ flex: 1, minWidth: '180px' }}
+                >
+                  <BookOpen size={16} /> Connect Microsoft OneNote
+                </button>
+                <button 
+                  id="btn-device-login"
+                  className="btn-secondary" 
+                  onClick={handleStartDeviceLogin}
+                  title="Alternative 1-click device login for corporate or restricted environments"
+                >
+                  <KeyRound size={15} /> Device Code
                 </button>
               </div>
             </div>
           )}
         </div>
 
-        {/* Notebooks Selector (When Connected) */}
-        {oneNoteStatus?.is_connected && (
-          <div className="upload-card" style={{ margin: 0, padding: '24px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px' }}>
-              <div>
-                <h3 style={{ fontSize: '1.15rem', color: '#fff', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <Layers size={18} style={{ color: 'var(--gold-primary)' }} /> Your OneNote Notebooks
-                </h3>
-                <span style={{ fontSize: '0.78rem', color: 'var(--text-dim)' }}>
-                  Fetched live via Microsoft Graph API
-                </span>
+        {/* Sync Summary & Health Card */}
+        <div className="saas-card" id="card-sync-summary">
+          <h3 style={{ fontSize: '1.15rem', color: 'var(--text-main)', marginBottom: '8px' }}>
+            Synchronization Summary
+          </h3>
+          <p style={{ fontSize: '0.82rem', color: 'var(--text-muted)', marginBottom: '20px' }}>
+            Visual index metrics across connected OneNote sections and pages.
+          </p>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', marginBottom: '20px' }}>
+            <div style={{ background: 'var(--bg-subtle)', padding: '14px', borderRadius: 'var(--radius-md)' }}>
+              <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)', fontWeight: 600 }}>INDEXED DESIGNS</div>
+              <div style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--primary-purple)', marginTop: '4px' }}>
+                {oneNoteStatus?.indexed_designs_count || designs.length}
               </div>
-              <button 
-                className="btn-secondary" 
-                onClick={loadNotebooks} 
-                disabled={isLoadingNotebooks}
-                style={{ padding: '4px 10px', fontSize: '0.75rem' }}
-                title="Refresh Notebooks List"
-              >
-                <RefreshCw size={12} className={isLoadingNotebooks ? 'spin' : ''} /> Refresh
-              </button>
+            </div>
+            <div style={{ background: 'var(--bg-subtle)', padding: '14px', borderRadius: 'var(--radius-md)' }}>
+              <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)', fontWeight: 600 }}>NOTEBOOKS</div>
+              <div style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--gold-primary)', marginTop: '4px' }}>
+                {notebooks.length || (oneNoteStatus?.notebooks_count || 1)}
+              </div>
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '0.80rem', color: 'var(--text-muted)' }}>
+            <Clock size={16} style={{ color: 'var(--text-dim)' }} />
+            <span>
+              Last synchronized: <strong>{oneNoteStatus?.last_synced || 'Just now (Live Catalog Active)'}</strong>
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {/* 3. CONNECTED NOTEBOOKS SELECTOR (When Connected) */}
+      {oneNoteStatus?.is_connected && (
+        <div className="saas-card" style={{ marginBottom: '32px' }} id="connected-notebooks-section">
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '18px', flexWrap: 'wrap', gap: '12px' }}>
+            <div>
+              <h3 style={{ fontSize: '1.15rem', color: 'var(--text-main)' }}>Connected OneNote Notebooks</h3>
+              <p style={{ fontSize: '0.82rem', color: 'var(--text-muted)', marginTop: '2px' }}>
+                Select which notebooks to include during automated image extraction and FAISS indexing.
+              </p>
+            </div>
+            <button 
+              className="btn-secondary"
+              onClick={loadNotebooks}
+              disabled={isLoadingNotebooks}
+              style={{ padding: '6px 12px', fontSize: '0.78rem', minHeight: 'auto' }}
+            >
+              <RefreshCw size={13} className={isLoadingNotebooks ? 'spinner' : ''} /> Refresh List
+            </button>
+          </div>
+
+          {isLoadingNotebooks ? (
+            <div style={{ textAlign: 'center', padding: '30px', color: 'var(--text-muted)' }}>
+              <RefreshCw size={24} className="spinner" style={{ margin: '0 auto 10px auto', color: 'var(--primary-purple)' }} />
+              <div>Fetching notebooks and sections from Microsoft Graph API...</div>
+            </div>
+          ) : notebooks.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '30px', color: 'var(--text-muted)', background: 'var(--bg-subtle)', borderRadius: 'var(--radius-md)' }}>
+              No notebooks discovered yet. Ensure your Microsoft OneNote account contains at least one notebook with sections.
+            </div>
+          ) : (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '16px' }}>
+              {notebooks.map((nb) => {
+                const isSelected = selectedNotebookIds.includes(nb.id);
+                return (
+                  <div 
+                    key={nb.id}
+                    onClick={() => handleToggleNotebook(nb.id)}
+                    style={{
+                      border: `1.5px solid ${isSelected ? 'var(--primary-purple)' : 'var(--border-subtle)'}`,
+                      background: isSelected ? 'var(--purple-light)' : '#ffffff',
+                      borderRadius: 'var(--radius-lg)',
+                      padding: '16px',
+                      cursor: 'pointer',
+                      transition: 'all 0.2s ease',
+                      boxShadow: isSelected ? 'var(--shadow-purple)' : 'var(--shadow-xs)'
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <BookOpen size={18} style={{ color: isSelected ? 'var(--primary-purple)' : 'var(--text-muted)' }} />
+                        <strong style={{ fontSize: '0.92rem', color: 'var(--text-main)' }}>{nb.displayName}</strong>
+                      </div>
+                      <input 
+                        type="checkbox" 
+                        checked={isSelected} 
+                        onChange={() => {}} 
+                        style={{ accentColor: 'var(--primary-purple)', width: '16px', height: '16px', cursor: 'pointer' }} 
+                      />
+                    </div>
+                    <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: '4px' }}>
+                      {nb.sectionsCount || (nb.sections ? nb.sections.length : 0)} sections available
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* 4. INDEXED SAREE DESIGNS CATALOG TABLE */}
+      <div className="saas-card" id="indexed-catalog-section">
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px', flexWrap: 'wrap', gap: '14px' }}>
+          <div>
+            <h3 style={{ fontSize: '1.25rem', color: 'var(--text-main)' }}>
+              Indexed Saree Designs Catalog ({filteredDesigns.length})
+            </h3>
+            <p style={{ fontSize: '0.82rem', color: 'var(--text-muted)', marginTop: '2px' }}>
+              Full library of saree patterns extracted and vectorized from your OneNote archive.
+            </p>
+          </div>
+
+          {/* Search & Filter Controls */}
+          <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
+            <div style={{ position: 'relative' }}>
+              <Search size={15} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-dim)' }} />
+              <input 
+                type="text"
+                placeholder="Search catalog..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                style={{
+                  padding: '8px 12px 8px 34px',
+                  borderRadius: 'var(--radius-md)',
+                  border: '1px solid var(--border-subtle)',
+                  background: 'var(--bg-subtle)',
+                  fontSize: '0.84rem',
+                  width: '180px'
+                }}
+              />
             </div>
 
-            {isLoadingNotebooks ? (
-              <div style={{ textAlign: 'center', padding: '30px', color: 'var(--text-muted)' }}>
-                <RefreshCw size={20} className="spin" style={{ color: 'var(--gold-primary)', marginBottom: '8px' }} />
-                <p style={{ fontSize: '0.85rem' }}>Loading notebooks from Microsoft Cloud...</p>
-              </div>
-            ) : notebooks.length === 0 ? (
-              <div style={{ textAlign: 'center', padding: '24px', background: 'rgba(255,255,255,0.02)', borderRadius: '8px', border: '1px solid var(--border-subtle)' }}>
-                <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>No notebooks found in this Microsoft account.</p>
-                <p style={{ fontSize: '0.75rem', color: 'var(--text-dim)', marginTop: '4px' }}>Create a notebook in OneNote with saree photos, then click Refresh.</p>
-              </div>
-            ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', maxHeight: '220px', overflowY: 'auto' }}>
-                {notebooks.map(nb => {
-                  const isChecked = selectedNotebookIds.includes(nb.id);
-                  return (
-                    <div 
-                      key={nb.id}
-                      onClick={() => toggleNotebookSelection(nb.id)}
-                      style={{
-                        padding: '12px',
-                        borderRadius: '6px',
-                        background: isChecked ? 'rgba(155, 48, 255, 0.12)' : 'rgba(255,255,255,0.02)',
-                        border: `1px solid ${isChecked ? 'rgba(155, 48, 255, 0.4)' : 'var(--border-subtle)'}`,
-                        cursor: 'pointer',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'space-between',
-                        transition: 'all 0.15s ease'
-                      }}
-                    >
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                        <input 
-                          type="checkbox" 
-                          checked={isChecked} 
-                          onChange={() => {}} 
-                          style={{ accentColor: '#a855f7', cursor: 'pointer' }}
-                        />
-                        <div>
-                          <div style={{ fontWeight: 600, color: '#fff', fontSize: '0.9rem' }}>{nb.displayName}</div>
-                          <div style={{ fontSize: '0.75rem', color: 'var(--text-dim)' }}>
-                            {nb.sectionsCount} {nb.sectionsCount === 1 ? 'section' : 'sections'}: {nb.sections?.map(s => s.displayName).join(', ') || 'No sections'}
-                          </div>
-                        </div>
-                      </div>
-                      <ChevronRight size={14} style={{ color: 'var(--text-dim)' }} />
-                    </div>
-                  );
-                })}
-              </div>
+            {uniqueCategories.length > 2 && (
+              <select
+                value={selectedCategory}
+                onChange={(e) => setSelectedCategory(e.target.value)}
+                style={{
+                  padding: '8px 12px',
+                  borderRadius: 'var(--radius-md)',
+                  border: '1px solid var(--border-subtle)',
+                  background: 'var(--bg-subtle)',
+                  fontSize: '0.84rem'
+                }}
+              >
+                {uniqueCategories.map(c => (
+                  <option key={c} value={c}>
+                    {c === 'all' ? 'All Categories' : c}
+                  </option>
+                ))}
+              </select>
             )}
+          </div>
+        </div>
+
+        {filteredDesigns.length === 0 ? (
+          <div style={{ textAlign: 'center', padding: '40px', color: 'var(--text-muted)' }}>
+            No saree designs match the selected search filter.
+          </div>
+        ) : (
+          <div className="data-table-container">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>Preview</th>
+                  <th>Design Title</th>
+                  <th>OneNote Location</th>
+                  <th>Category</th>
+                  <th>Exact Coordinates</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredDesigns.slice(0, 50).map((item) => (
+                  <tr key={item.id}>
+                    <td data-label="Preview">
+                      <img 
+                        src={item.image_url} 
+                        alt={item.title} 
+                        style={{ width: '48px', height: '48px', borderRadius: '6px', objectFit: 'cover', border: '1px solid #e2e8f0' }} 
+                      />
+                    </td>
+                    <td data-label="Design Title">
+                      <strong style={{ color: 'var(--text-main)', fontSize: '0.88rem' }}>{item.title}</strong>
+                      <div style={{ fontSize: '0.72rem', color: 'var(--text-dim)', fontFamily: 'monospace' }}>
+                        ID: {item.design_id || item.id}
+                      </div>
+                    </td>
+                    <td data-label="OneNote Location">
+                      <div style={{ fontSize: '0.82rem', color: 'var(--text-secondary)' }}>
+                        <strong>{item.notebook_name}</strong> &gt; {item.section_name} &gt; {item.page_title}
+                      </div>
+                    </td>
+                    <td data-label="Category">
+                      <span style={{ 
+                        background: 'var(--purple-light)', 
+                        color: 'var(--primary-purple)', 
+                        padding: '3px 8px', 
+                        borderRadius: '4px',
+                        fontSize: '0.74rem',
+                        fontWeight: 600
+                      }}>
+                        {item.category || 'Traditional'}
+                      </span>
+                    </td>
+                    <td data-label="Exact Coordinates">
+                      <span className="exact-image-badge">
+                        Image #{item.image_order || 1} on page
+                      </span>
+                    </td>
+                    <td data-label="Action">
+                      <a 
+                        href={item.object_client_url || item.object_web_url || getCleanOneNoteUrl(item)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="btn-onenote"
+                        style={{ padding: '6px 12px', fontSize: '0.76rem' }}
+                        title="Open exact image in OneNote"
+                      >
+                        <ExternalLink size={12} /> Open in OneNote
+                      </a>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         )}
       </div>
 
-      {/* Catalog Table */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px', flexWrap: 'wrap', gap: '12px' }}>
-        <div>
-          <h3 style={{ fontSize: '1.25rem', color: '#fff' }}>Your Indexed OneNote Designs</h3>
-          <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-            {designs.length} designs available for AI similarity search in your account.
-          </p>
-        </div>
-
-        <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-          {designs.length > 0 && (
-            <button 
-              className="btn-secondary" 
-              onClick={handleClearCatalog}
-              style={{ color: '#fca5a5', fontSize: '0.8rem' }}
-            >
-              <Trash2 size={13} /> Clear Catalog
-            </button>
-          )}
-        </div>
-      </div>
-
-      {/* Table Display */}
-      <div className="table-responsive">
-        <table className="catalog-table">
-          <thead>
-            <tr>
-              <th>Preview</th>
-              <th>Design / Page Title</th>
-              <th>Category / Section</th>
-              <th>OneNote Location</th>
-              <th>Action</th>
-            </tr>
-          </thead>
-          <tbody>
-            {designs.length === 0 ? (
-              <tr>
-                <td colSpan="5" style={{ textAlign: 'center', padding: '40px', color: 'var(--text-muted)' }}>
-                  {oneNoteStatus?.is_connected 
-                    ? "No saree designs indexed yet. Click 'Sync Notebooks Now' above to ingest images from your OneNote."
-                    : "Connect your Microsoft OneNote account above to view and search your designs."}
-                </td>
-              </tr>
-            ) : (
-              designs.slice(0, 100).map((d) => (
-                <tr key={d.id}>
-                  <td style={{ width: '60px' }}>
-                    <div style={{ width: '48px', height: '48px', borderRadius: '4px', overflow: 'hidden', background: '#000', border: '1px solid var(--border-subtle)' }}>
-                      <img src={d.image_url} alt={d.title} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                    </div>
-                  </td>
-                  <td>
-                    <div style={{ fontWeight: 600, color: '#fff' }}>{d.title}</div>
-                    <div style={{ fontSize: '0.72rem', color: 'var(--text-dim)' }}>ID: {d.design_id}</div>
-                  </td>
-                  <td>
-                    <span className="badge-tag">{d.category || d.section_name || 'OneNote'}</span>
-                  </td>
-                  <td>
-                    <OneNoteBreadcrumb 
-                      notebook={d.notebook_name} 
-                      section={d.section_name} 
-                      page={d.page_title}
-                    />
-                  </td>
-                  <td>
-                    {d.onenote_web_url || d.onenote_client_url ? (
-                      <button 
-                        onClick={async (e) => {
-                          e.preventDefault();
-                          try {
-                            const res = await api.openInOneNote(d.id, 'desktop');
-                            if (res && res.client_url) {
-                              window.location.href = res.client_url;
-                            }
-                          } catch (err) {}
-                        }}
-                        className="btn-onenote"
-                        style={{ padding: '6px 12px', fontSize: '0.78rem', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
-                        title={`Open exact location in Desktop OneNote: ${d.notebook_name} > ${d.section_name} > ${d.page_title}`}
-                      >
-                        <ExternalLink size={12} /> Open in OneNote
-                      </button>
-                    ) : (
-                      <span style={{ fontSize: '0.75rem', color: 'var(--text-dim)' }}>—</span>
-                    )}
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
-
-      {/* 1-Click Microsoft Device Login Modal */}
+      {/* 5. MICROSOFT DEVICE LOGIN MODAL (Fallback Flow) */}
       {deviceLogin.isOpen && (
-        <div className="modal-overlay" onClick={closeDeviceLoginModal}>
-          <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '480px', textAlign: 'center' }}>
-            <div className="modal-header" style={{ justifyContent: 'center', position: 'relative' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <div style={{ width: '36px', height: '36px', borderRadius: '50%', background: 'rgba(212, 175, 55, 0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--gold-primary)' }}>
-                  <Sparkles size={20} />
-                </div>
-                <h3 style={{ fontSize: '1.2rem', color: '#fff' }}>Sign In to Microsoft OneNote</h3>
-              </div>
-              <button 
-                className="close-btn" 
-                onClick={closeDeviceLoginModal}
-                style={{ position: 'absolute', right: '16px', top: '16px' }}
-              >
-                ×
+        <div className="modal-backdrop" onClick={closeDeviceLoginModal}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '500px', textAlign: 'center' }}>
+            <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+              <button onClick={closeDeviceLoginModal} style={{ background: 'transparent', color: 'var(--text-muted)' }}>
+                <X size={20} />
               </button>
             </div>
+            
+            <div style={{
+              width: '56px',
+              height: '56px',
+              borderRadius: 'var(--radius-full)',
+              background: 'var(--purple-light)',
+              color: 'var(--primary-purple)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              margin: '0 auto 16px auto'
+            }}>
+              <KeyRound size={28} />
+            </div>
 
-            <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', margin: '14px 0 16px', lineHeight: '1.5' }}>
-              Works with personal accounts (<strong>@outlook.com, @hotmail.com, @gmail.com</strong>) or work/school accounts.
+            <h3 style={{ fontSize: '1.35rem', color: 'var(--text-main)', marginBottom: '8px' }}>
+              Microsoft Device Login
+            </h3>
+            <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '22px' }}>
+              Enter the code below on the Microsoft Device Login page to connect your OneNote account:
             </p>
 
-            <div style={{ background: 'rgba(255, 255, 255, 0.03)', border: '1px dashed var(--gold-primary)', borderRadius: 'var(--radius-md)', padding: '18px', marginBottom: '18px' }}>
-              <div style={{ fontSize: '0.75rem', color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '6px' }}>
-                Step 1: Your OneNote Login Code:
-              </div>
-              <div style={{ fontSize: '2.2rem', fontWeight: 800, color: 'var(--gold-light)', letterSpacing: '4px', fontFamily: 'monospace' }}>
-                {deviceLogin.userCode || 'LOADING...'}
+            <div style={{
+              background: 'var(--bg-subtle)',
+              border: '2px dashed var(--purple-border)',
+              borderRadius: 'var(--radius-lg)',
+              padding: '18px',
+              marginBottom: '20px'
+            }}>
+              <div style={{ fontSize: '1.9rem', fontWeight: 800, letterSpacing: '0.15em', color: 'var(--primary-purple)', fontFamily: 'monospace' }}>
+                {deviceLogin.userCode}
               </div>
               <button 
-                onClick={handleCopyCode}
-                style={{ marginTop: '10px', fontSize: '0.8rem', padding: '6px 14px', borderRadius: '4px', background: 'rgba(212, 175, 55, 0.2)', color: 'var(--gold-light)', border: '1px solid var(--border-active)', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '6px', fontWeight: 600 }}
+                onClick={() => {
+                  navigator.clipboard.writeText(deviceLogin.userCode);
+                  setDeviceLogin(prev => ({ ...prev, copied: true }));
+                  setTimeout(() => setDeviceLogin(prev => ({ ...prev, copied: false })), 2000);
+                }}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  background: '#ffffff',
+                  border: '1px solid var(--border-subtle)',
+                  borderRadius: 'var(--radius-sm)',
+                  padding: '4px 10px',
+                  fontSize: '0.78rem',
+                  marginTop: '10px',
+                  cursor: 'pointer'
+                }}
               >
-                {deviceLogin.copied ? <Check size={14} /> : <Copy size={14} />}
-                {deviceLogin.copied ? 'Copied to Clipboard!' : 'Copy Code'}
+                {deviceLogin.copied ? <Check size={13} style={{ color: 'var(--accent-emerald)' }} /> : <Copy size={13} />}
+                <span>{deviceLogin.copied ? 'Copied Code!' : 'Copy Code'}</span>
               </button>
             </div>
 
-            <div style={{ marginBottom: '14px' }}>
-              <div style={{ fontSize: '0.78rem', color: 'var(--text-dim)', marginBottom: '8px' }}>
-                Step 2: Enter code on Microsoft's authorization page:
-              </div>
-              <a 
-                href={deviceLogin.verificationUri} 
-                target="_blank" 
-                rel="noreferrer"
-                className="btn-primary"
-                style={{ width: '100%', justifyContent: 'center', padding: '12px', fontSize: '0.92rem' }}
-              >
-                <ExternalLink size={16} /> Open {deviceLogin.verificationUri}
-              </a>
-            </div>
+            <a 
+              href={deviceLogin.verificationUri} 
+              target="_blank" 
+              rel="noopener noreferrer"
+              className="btn-primary"
+              style={{ width: '100%', justifyContent: 'center', marginBottom: '14px' }}
+            >
+              <ExternalLink size={16} /> Open Microsoft Login Page
+            </a>
 
-            <div style={{ marginBottom: '18px' }}>
-              <button
-                type="button"
-                className="btn-secondary"
-                onClick={handleCheckDeviceLoginStatus}
-                style={{ width: '100%', justifyContent: 'center', padding: '10px', fontSize: '0.84rem' }}
-              >
-                <CheckCircle2 size={15} style={{ color: 'var(--accent-emerald)' }} /> I've Approved the Code - Connect Now
-              </button>
-            </div>
-
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-              <RefreshCw size={13} className="spin" style={{ color: 'var(--gold-primary)' }} />
-              <span>Auto-detecting your approval in the background...</span>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', fontSize: '0.80rem', color: 'var(--text-muted)' }}>
+              <RefreshCw size={14} className="spinner" />
+              <span>Waiting for approval on Microsoft...</span>
             </div>
           </div>
         </div>

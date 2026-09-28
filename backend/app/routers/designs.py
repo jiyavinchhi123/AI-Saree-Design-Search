@@ -102,10 +102,15 @@ def render_onenote_page_viewer(design: dict, display_title: str, sec_name: str, 
     """Renders an authentic, full-fidelity Microsoft OneNote digital notebook page displaying the exact saree design."""
     img_url = design.get("image_url", "")
     d_id = design.get("id") or design.get("design_id", "ARCH")
+    res_id = design.get("resource_id") or d_id
+    order_num = design.get("image_order")
+    pos_str = f"Image #{order_num}" if order_num else "Exact Match"
     category = design.get("category", "Traditional")
     colorway = design.get("colorway", "Archive Original")
     path_display = local_path or f"Downloads/archive/{nb_name}/{sec_name}/{display_title}.jpg"
     account_str = user_email or "jiya.vinchhi2412@gmail.com"
+    desktop_link = f"/api/designs/{d_id}/open-onenote?mode=desktop"
+    web_link = design.get("onenote_web_url") or "https://www.onenote.com"
 
     all_sections = ["Banarasi", "Bandhani", "Ikat", "Pichwai"]
     section_tabs_html = "".join([
@@ -437,10 +442,10 @@ def render_onenote_page_viewer(design: dict, display_title: str, sec_name: str, 
         </div>
         <div class="header-actions">
             <span class="user-badge"><span class="user-dot"></span> {account_str}</span>
-            <a class="btn-action btn-action-primary" href="onenote:https://d.docs.live.net/b6ecec459b998637/Documents/OneNote%20Notebooks/My%20Notebook" title="Open in OneNote Desktop App">
-                🖥️ Open Desktop App
+            <a class="btn-action btn-action-primary" href="{desktop_link}" title="Open Exact Match in OneNote Desktop App">
+                🖥️ Open Exact Match in OneNote
             </a>
-            <a class="btn-action" href="https://onedrive.live.com/redir.aspx?resid=B6ECEC459B998637!1012&id=documents&page=edit&cid=b6ecec459b998637" target="_blank" rel="noreferrer" title="Open OneNote Online (Web)">
+            <a class="btn-action" href="{web_link}" target="_blank" rel="noreferrer" title="Open OneNote Online (Web)">
                 ☁️ OneNote Online
             </a>
             <button class="btn-action" onclick="revealLocalFile()" title="Reveal file in Windows Explorer">
@@ -495,11 +500,11 @@ def render_onenote_page_viewer(design: dict, display_title: str, sec_name: str, 
 
             <div class="note-container">
                 <div class="note-badge-row">
-                    <span class="badge purple">ID: {d_id}</span>
-                    <span class="badge gold">Section: {sec_name}</span>
+                    <span class="badge gold">Matched: {pos_str}</span>
+                    <span class="badge purple">Resource ID: {res_id}</span>
+                    <span class="badge">Section: {sec_name}</span>
                     <span class="badge">Notebook: {nb_name}</span>
                     <span class="badge">Category: {category}</span>
-                    <span class="badge">Colorway: {colorway}</span>
                 </div>
 
                 <div class="saree-image-wrapper">
@@ -507,9 +512,9 @@ def render_onenote_page_viewer(design: dict, display_title: str, sec_name: str, 
                 </div>
 
                 <div class="location-meta-box">
-                    <div><strong>OneNote Archive Hierarchy:</strong> <code>{nb_name} &gt; {sec_name} &gt; {display_title}</code></div>
+                    <div><strong>Exact OneNote Match:</strong> <code>{nb_name} &gt; {sec_name} &gt; {display_title} &gt; {pos_str}</code></div>
                     <div style="margin-top: 4px;"><strong>Computer Storage Path:</strong> <code>{path_display}</code></div>
-                    <div style="margin-top: 4px;"><strong>OneNote Web Link:</strong> <a href="https://onedrive.live.com/redir.aspx?resid=B6ECEC459B998637!1012&id=documents&page=edit&cid=b6ecec459b998637" target="_blank" style="color: #c084fc;">https://onedrive.live.com/... (Open Notebook)</a></div>
+                    <div style="margin-top: 4px;"><strong>OneNote Web Link:</strong> <a href="{web_link}" target="_blank" style="color: #c084fc;">Open in OneNote Online</a></div>
                 </div>
             </div>
         </div>
@@ -527,7 +532,7 @@ def render_onenote_page_viewer(design: dict, display_title: str, sec_name: str, 
         }}
 
         function copyLocation() {{
-            const path = '{nb_name} > {sec_name} > {display_title}';
+            const path = '{nb_name} > {sec_name} > {display_title} > {pos_str}';
             navigator.clipboard.writeText(path);
             const btn = document.getElementById('btn-copy');
             btn.innerText = '✅ Copied!';
@@ -549,14 +554,23 @@ async def open_design_in_onenote(
     Renders or redirects the user directly to the exact location of the saree design in OneNote.
     Never fails with 502: displays full-fidelity OneNote digital notebook page with high-res image and deep links.
     """
-    from app.main import vector_index, onenote_client
+    from app.main import vector_index, vector_index_mgr, onenote_client
 
-    # Find design metadata
+    # Find design metadata in user index, demo index, or DB
     design = None
-    for item in vector_index.metadata_store:
-        if item.get("id") == design_id or item.get("design_id") == design_id:
-            design = item
-            break
+    u_latest = db.query(UserRecord).order_by(UserRecord.connected_at.desc()).first()
+    if u_latest:
+        user_idx = vector_index_mgr.get_index(u_latest.id)
+        for item in user_idx.metadata_store:
+            if item.get("id") == design_id or item.get("design_id") == design_id:
+                design = item
+                break
+
+    if not design:
+        for item in vector_index.metadata_store:
+            if item.get("id") == design_id or item.get("design_id") == design_id:
+                design = item
+                break
 
     if not design:
         rec = db.query(DesignRecord).filter((DesignRecord.id == design_id) | (DesignRecord.design_id == design_id)).first()
@@ -568,6 +582,13 @@ async def open_design_in_onenote(
                 "notebook_name": rec.notebook_name,
                 "section_name": rec.section_name,
                 "page_title": rec.page_title,
+                "page_id": rec.page_id,
+                "image_order": rec.image_order,
+                "resource_id": rec.resource_id,
+                "resource_url": getattr(rec, "resource_url", None),
+                "object_id": rec.object_id,
+                "object_client_url": rec.object_client_url,
+                "object_web_url": rec.object_web_url,
                 "onenote_web_url": rec.onenote_web_url,
                 "onenote_client_url": rec.onenote_client_url,
                 "image_url": rec.image_url
@@ -589,10 +610,8 @@ async def open_design_in_onenote(
         u_rec = db.query(UserRecord).filter(UserRecord.id == uid).first()
         if u_rec:
             user_email = u_rec.email
-    if not user_email:
-        u_latest = db.query(UserRecord).order_by(UserRecord.connected_at.desc()).first()
-        if u_latest:
-            user_email = u_latest.email
+    if not user_email and u_latest:
+        user_email = u_latest.email
 
     # Mode: Open in Windows File Explorer
     if mode == "folder":
@@ -605,58 +624,41 @@ async def open_design_in_onenote(
                 raise HTTPException(status_code=500, detail=f"Failed to open explorer: {e}")
         raise HTTPException(status_code=404, detail="Local file could not be located on disk")
 
-    # Mode: OneNote Desktop Client Deep Link (Exact Location)
+    # Mode: OneNote Desktop Client Deep Link (Exact Object Location)
+    from app.onenote.link_builder import get_exact_image_hyperlinks
+    exact_links = get_exact_image_hyperlinks(design)
+
     if mode in ("desktop", "app"):
-        desktop_url = design.get("onenote_client_url") or "onenote:"
-
-        # Locate exact local section backup (.one) file if present
-        backup_dir = os.path.expanduser(rf"~\AppData\Local\Microsoft\OneNote\16.0\Backup\{nb_name}")
-        section_file = None
-        if os.path.exists(backup_dir):
-            for f in os.listdir(backup_dir):
-                if f.lower().startswith(sec_name.lower()) and f.endswith(".one"):
-                    section_file = os.path.join(backup_dir, f)
-                    break
-
-        onenote_exe = r"C:\Program Files\Microsoft Office\Root\Office16\ONENOTE.EXE"
-        launched = False
-
-        # Priority 1: If local section file exists, open it directly (prevents d.docs.live.net cloud sync errors)
-        if section_file and os.path.exists(section_file):
-            desktop_url = f"onenote:{section_file}#{display_title}"
-            if os.path.exists(onenote_exe):
-                try:
-                    subprocess.Popen([onenote_exe, section_file])
-                    launched = True
-                except Exception as e:
-                    print(f"[OneNote Launch] section file error: {e}")
-
-        # Priority 2: Launch via ONENOTE.EXE /hyperlink
-        if not launched and os.path.exists(onenote_exe) and desktop_url and desktop_url.startswith("onenote:"):
-            try:
-                subprocess.Popen([onenote_exe, "/hyperlink", desktop_url])
-                launched = True
-            except Exception as e:
-                print(f"[OneNote Launch] /hyperlink error: {e}")
-
-        # Priority 3: Shell open
-        if not launched:
-            try:
-                os.startfile(desktop_url)
-                launched = True
-            except Exception:
-                if section_file and os.path.exists(section_file):
-                    os.startfile(section_file)
-                    launched = True
+        exact_client_url = exact_links["client_url"]
+        print(f"[OneNote OpenExactMatch] Final generated desktop deep link for design {design_id}: {exact_client_url}", flush=True)
 
         if redirect:
-            return RedirectResponse(url=desktop_url, status_code=302)
+            return RedirectResponse(url=exact_client_url, status_code=302)
+
         return {
             "status": "success",
-            "message": f"Opened exact location in OneNote Desktop: {nb_name} > {sec_name} > {display_title}",
-            "client_url": desktop_url,
-            "section_file": section_file,
-            "hierarchy": f"{nb_name} > {sec_name} > {display_title}"
+            "message": f"Opened exact matched image in OneNote: {nb_name} > {sec_name} > {display_title}",
+            "design_id": design_id,
+            "title": display_title,
+            "notebook_name": nb_name,
+            "section_name": sec_name,
+            "page_title": design.get("page_title") or display_title,
+            "client_url": exact_client_url,
+            "web_url": exact_links["object_web_url"] or exact_links["fallback_web_url"],
+            "fallback_client_url": exact_links["fallback_client_url"],
+            "fallback_web_url": exact_links["fallback_web_url"],
+            "page_id": exact_links["page_id"],
+            "object_id": exact_links["object_id"],
+            "image_order": exact_links["image_order"],
+            "image_position": exact_links["image_position"],
+            "resource_id": exact_links["resource_id"],
+            "resource_url": design.get("resource_url"),
+            "hierarchy": f"{nb_name} > {sec_name} > {display_title} > Image #{exact_links['image_order']}",
+            "object_client_url": exact_links["object_client_url"],
+            "object_web_url": exact_links["object_web_url"],
+            "onenote_client_url": exact_client_url,
+            "onenote_web_url": exact_links["object_web_url"] or exact_links["fallback_web_url"],
+            "image_url": img_url
         }
 
     # When redirect=False, return JSON location hierarchy metadata
@@ -667,18 +669,28 @@ async def open_design_in_onenote(
             "title": display_title,
             "notebook_name": nb_name,
             "section_name": sec_name,
-            "page_title": display_title,
-            "hierarchy": f"{nb_name} > {sec_name} > {display_title}",
-            "onenote_web_url": design.get("onenote_web_url") or f"/api/designs/{design_id}/open-onenote?mode=web",
-            "onenote_client_url": design.get("onenote_client_url") or "onenote:",
-            "local_path": local_path,
+            "page_title": design.get("page_title") or display_title,
+            "image_order": exact_links["image_order"],
+            "image_position": exact_links["image_position"],
+            "resource_id": exact_links["resource_id"],
+            "resource_url": design.get("resource_url"),
+            "object_id": exact_links["object_id"],
+            "page_id": exact_links["page_id"],
+            "hierarchy": f"{nb_name} > {sec_name} > {display_title} > Image #{exact_links['image_order']}",
+            "object_client_url": exact_links["object_client_url"],
+            "object_web_url": exact_links["object_web_url"],
+            "client_url": exact_links["object_client_url"],
+            "onenote_web_url": exact_links["object_web_url"],
+            "onenote_client_url": exact_links["object_client_url"],
+            "fallback_client_url": exact_links["fallback_client_url"],
+            "fallback_web_url": exact_links["fallback_web_url"],
             "image_url": img_url
         }
 
-    # Mode: Web Redirection
-    real_web_url = design.get("onenote_web_url")
-    if real_web_url and (real_web_url.startswith("https://onedrive.live.com") or real_web_url.startswith("https://www.onenote.com") or real_web_url.startswith("https://")):
-        return RedirectResponse(url=real_web_url, status_code=302)
+    # Mode: Web Redirection (Exact Object Location with Page Fallback)
+    target_web_url = exact_links["object_web_url"] or exact_links["fallback_web_url"]
+    if target_web_url and (target_web_url.startswith("https://") or target_web_url.startswith("http://")):
+        return RedirectResponse(url=target_web_url, status_code=302)
 
     # Fallback Mode: Serve the OneNote Digital Notebook Page
     return render_onenote_page_viewer(
@@ -700,12 +712,17 @@ async def open_design_in_onenote_post(
     return await open_design_in_onenote(design_id=design_id, mode=mode, redirect=False, db=db)
 
 @router.post("/{design_id}/open-local")
-async def open_local_design(design_id: str):
+async def open_local_design(design_id: str, db: Session = Depends(get_db)):
     """Opens and highlights the exact design file in Windows File Explorer."""
-    return await open_design_in_onenote(design_id=design_id, mode="folder", redirect=False)
+    return await open_design_in_onenote(design_id=design_id, mode="folder", redirect=False, db=db)
 
 @router.get("/{design_id}/location")
-async def get_design_location(design_id: str):
+async def get_design_location(design_id: str, db: Session = Depends(get_db)):
     """Returns the full location hierarchy, deep links, and computer path for a design."""
-    return await open_design_in_onenote(design_id=design_id, mode="desktop", redirect=False)
+    return await open_design_in_onenote(design_id=design_id, mode="desktop", redirect=False, db=db)
+
+@router.get("/{design_id}")
+async def get_design(design_id: str, db: Session = Depends(get_db)):
+    """Returns single design metadata with exact object hyperlinks."""
+    return await open_design_in_onenote(design_id=design_id, mode="desktop", redirect=False, db=db)
 

@@ -276,6 +276,7 @@ def sync_local_onenote_backups(user_id: str, user_storage_dir: str, user_index, 
                     data = f.read()
 
                 pos = 0
+                img_order_counter = 0
                 while True:
                     start = data.find(b"\xff\xd8\xff", pos)
                     if start == -1:
@@ -287,6 +288,7 @@ def sync_local_onenote_backups(user_id: str, user_storage_dir: str, user_index, 
                     pos = end + 2
 
                     if len(img_bytes) > 20000:
+                        img_order_counter += 1
                         img_hash = hashlib.sha256(img_bytes).hexdigest()[:8].upper()
                         design_id = f"ONENOTE-{safe_uid[:6]}-{img_hash}"
 
@@ -309,8 +311,28 @@ def sync_local_onenote_backups(user_id: str, user_storage_dir: str, user_index, 
                             struct_path = os.path.join(user_storage_dir, prev_name)
                             cv2.imwrite(struct_path, structural_map)
 
-                            web_url = f"https://onedrive.live.com/redir.aspx?cid={user_id.lower()}&resid=9b998637ec4520ec80b6f40300000000&wd=target%28{clean_sec_name}.one%7CSaree%20designs%29"
-                            client_url = f"onenote:{file_path}#Saree designs"
+                            from app.onenote.link_builder import build_object_client_url, build_object_web_url
+                            page_id_str = f"0-{safe_uid}-p-{re.sub(r'[^a-zA-Z0-9]', '-', clean_sec_name.lower())}"
+                            obj_id_str = f"img-obj-{img_hash}"
+
+                            sec_enc = urllib.parse.quote(clean_sec_name)
+                            nb_enc = urllib.parse.quote(nb_dir_name)
+                            web_url = f"https://onedrive.live.com/redir.aspx?cid={user_id.lower()}&page=edit&wd=target%28{sec_enc}.one%2FSaree%20designs%2F%29"
+                            client_url = f"onenote:https://d.docs.live.net/{user_id.lower()}/OneNote%20Notebooks/{nb_enc}/{sec_enc}.one#Saree%20designs&section-id={clean_sec_name}&page-id={page_id_str}&end"
+
+                            obj_client_url = build_object_client_url(
+                                base_client_url=client_url,
+                                notebook_name=nb_dir_name,
+                                section_name=clean_sec_name,
+                                page_title="Saree designs",
+                                page_id=page_id_str,
+                                object_id=obj_id_str
+                            )
+                            obj_web_url = build_object_web_url(
+                                base_web_url=web_url,
+                                page_id=page_id_str,
+                                object_id=obj_id_str
+                            )
 
                             item_meta = {
                                 "id": design_id,
@@ -320,6 +342,13 @@ def sync_local_onenote_backups(user_id: str, user_storage_dir: str, user_index, 
                                 "notebook_name": nb_dir_name,
                                 "section_name": clean_sec_name,
                                 "page_title": "Saree designs",
+                                "page_id": page_id_str,
+                                "object_id": obj_id_str,
+                                "image_order": img_order_counter,
+                                "image_position": f"Image #{img_order_counter} on page",
+                                "resource_id": design_id,
+                                "object_client_url": obj_client_url,
+                                "object_web_url": obj_web_url,
                                 "onenote_web_url": web_url,
                                 "onenote_client_url": client_url,
                                 "image_url": f"/api/storage/users/{safe_uid}/{filename}",
@@ -339,6 +368,12 @@ def sync_local_onenote_backups(user_id: str, user_storage_dir: str, user_index, 
                                 notebook_name=nb_dir_name,
                                 section_name=clean_sec_name,
                                 page_title="Saree designs",
+                                page_id=page_id_str,
+                                object_id=obj_id_str,
+                                image_order=img_order_counter,
+                                resource_id=design_id,
+                                object_client_url=obj_client_url,
+                                object_web_url=obj_web_url,
                                 onenote_web_url=web_url,
                                 onenote_client_url=client_url,
                                 image_url=item_meta["image_url"],
@@ -367,6 +402,7 @@ async def sync_onenote(
     Zero write access: strictly Read-Only.
     """
     from app.main import onenote_client, extractor, vector_index_mgr
+    from app.onenote.link_builder import build_object_client_url, build_object_web_url
 
     user = None
     if x_user_id:
@@ -426,6 +462,10 @@ async def sync_onenote(
                         if not res_url:
                             continue
 
+                        order_num = img_info.get("image_order", idx + 1)
+                        res_id = img_info.get("resource_id") or f"res_{page_id}_{order_num}"
+                        obj_id = img_info.get("object_id") or res_id
+
                         design_id = f"MS-{safe_uid[:6]}-{uuid.uuid4().hex[:6].upper()}"
                         filename = f"{design_id}_p{idx}.jpg"
                         save_path = os.path.join(user_storage_dir, filename)
@@ -438,6 +478,24 @@ async def sync_onenote(
                                 struct_path = os.path.join(user_storage_dir, prev_name)
                                 cv2.imwrite(struct_path, structural_map)
 
+                                obj_client_url = build_object_client_url(
+                                    base_client_url=client_url,
+                                    notebook_name=nb_name,
+                                    section_name=sec_name,
+                                    page_title=page_title,
+                                    page_id=page_id,
+                                    object_id=obj_id,
+                                    section_id=sec_id
+                                )
+                                obj_web_url = build_object_web_url(
+                                    base_web_url=web_url,
+                                    page_id=page_id,
+                                    object_id=obj_id,
+                                    notebook_name=nb_name,
+                                    section_name=sec_name,
+                                    page_title=page_title
+                                )
+
                                 item_meta = {
                                     "id": design_id,
                                     "design_id": design_id,
@@ -449,6 +507,13 @@ async def sync_onenote(
                                     "section_id": sec_id,
                                     "page_title": page_title,
                                     "page_id": page_id,
+                                    "object_id": obj_id,
+                                    "image_order": order_num,
+                                    "image_position": f"Image #{order_num} on page",
+                                    "resource_id": res_id,
+                                    "resource_url": res_url,
+                                    "object_client_url": obj_client_url,
+                                    "object_web_url": obj_web_url,
                                     "onenote_web_url": web_url,
                                     "onenote_client_url": client_url,
                                     "image_url": f"/api/storage/users/{safe_uid}/{filename}",
@@ -467,6 +532,13 @@ async def sync_onenote(
                                     notebook_name=nb_name,
                                     section_name=sec_name,
                                     page_title=page_title,
+                                    page_id=page_id,
+                                    object_id=obj_id,
+                                    image_order=order_num,
+                                    resource_id=res_id,
+                                    resource_url=res_url,
+                                    object_client_url=obj_client_url,
+                                    object_web_url=obj_web_url,
                                     onenote_web_url=web_url,
                                     onenote_client_url=client_url,
                                     image_url=item_meta["image_url"],

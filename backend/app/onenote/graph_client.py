@@ -329,25 +329,66 @@ class MicrosoftOneNoteClient:
 
     async def get_page_content_and_images(self, content_url: str, access_token: str) -> tuple[str, List[Dict[str, Any]]]:
         """
-        Fetches the HTML of a OneNote page and extracts image resource endpoints.
+        Fetches the HTML of a OneNote page using GET .../content?includeIDs=true
+        and extracts each image separately with its:
+        - actual OneNote page-content element/object ID (<img id="...">)
+        - image resource URL and resource ID (binary attachment)
+        - position / order on the page
         """
         try:
+            # Mandate ?includeIDs=true so Microsoft Graph injects real element IDs into the HTML
+            req_url = content_url
+            if "includeIDs" not in req_url:
+                delimiter = "&" if "?" in req_url else "?"
+                req_url = f"{req_url}{delimiter}includeIDs=true"
+
             async with httpx.AsyncClient(timeout=30.0) as client:
                 resp = await client.get(
-                    content_url,
+                    req_url,
                     headers={"Authorization": f"Bearer {access_token}"}
                 )
                 if resp.status_code != 200:
+                    print(f"[OneNote Graph] Page content fetch error: HTTP {resp.status_code} for {req_url}")
                     return "", []
 
                 html = resp.text
-                img_pattern = re.compile(r'<img[^>]+src=["\']([^"\']+)["\']', re.IGNORECASE)
-                matches = img_pattern.findall(html)
+                img_tag_pattern = re.compile(r'<img\s+([^>]+)>', re.IGNORECASE)
+                src_pattern = re.compile(r'src=["\']([^"\']+)["\']', re.IGNORECASE)
+                id_pattern = re.compile(r'\bid=["\']([^"\']+)["\']', re.IGNORECASE)
+                data_id_pattern = re.compile(r'data-id=["\']([^"\']+)["\']', re.IGNORECASE)
+                data_data_id_pattern = re.compile(r'data-data-id=["\']([^"\']+)["\']', re.IGNORECASE)
 
                 resources = []
-                for src in matches:
+                img_matches = img_tag_pattern.findall(html)
+                for order, tag_attrs in enumerate(img_matches, start=1):
+                    src_m = src_pattern.search(tag_attrs)
+                    if not src_m:
+                        continue
+                    src = src_m.group(1)
                     if "onenote/resources" in src or "graph.microsoft.com" in src:
-                        resources.append({"resource_url": src})
+                        # 1. Real OneNote image element/object ID from <img id="...">
+                        id_m = id_pattern.search(tag_attrs)
+                        real_object_id = id_m.group(1) if id_m else None
+
+                        # 2. Resource ID from data-data-id, data-id, or src URL
+                        data_data_id_m = data_data_id_pattern.search(tag_attrs)
+                        data_id_m = data_id_pattern.search(tag_attrs)
+                        u_m = re.search(r'resources/([^/\?"]+)', src)
+
+                        res_id = (
+                            (data_data_id_m.group(1) if data_data_id_m else None) or
+                            (data_id_m.group(1) if data_id_m else None) or
+                            (u_m.group(1) if u_m else None)
+                        )
+
+                        # Store actual element object ID separate from resource ID
+                        resources.append({
+                            "resource_url": src,
+                            "resource_id": res_id or f"res_{order}",
+                            "object_id": real_object_id or res_id or f"obj_{order}",
+                            "image_order": order,
+                            "image_position": f"Image #{order} on page"
+                        })
 
                 return html, resources
         except Exception as e:

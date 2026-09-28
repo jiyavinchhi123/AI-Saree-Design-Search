@@ -1,17 +1,21 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef } from 'react';
 import { 
   UploadCloud, 
   Search, 
-  AlertCircle, 
-  CheckCircle2, 
-  Sliders, 
+  RotateCcw, 
   ExternalLink, 
   Eye, 
-  Image as ImageIcon, 
-  RotateCcw, 
+  Sliders, 
+  CheckCircle2, 
+  AlertCircle, 
+  Sparkles, 
+  Target, 
+  Globe, 
   Cpu, 
-  Laptop,
-  Globe
+  Image as ImageIcon,
+  X,
+  Layers,
+  ShieldCheck
 } from 'lucide-react';
 import { api, getCleanOneNoteUrl, getCleanOneNoteClientUrl, getCleanOneNoteWebUrl } from '../services/api';
 import OneNoteBreadcrumb from '../components/OneNoteBreadcrumb';
@@ -20,20 +24,13 @@ import StructuralMapModal from '../components/StructuralMapModal';
 export default function SearchDesign() {
   const [selectedFile, setSelectedFile] = useState(null);
   const [previewUrl, setPreviewUrl] = useState(null);
-  const [oneNoteStatus, setOneNoteStatus] = useState(null);
-  
-  const [threshold, setThreshold] = useState(0.80);
+  const [threshold, setThreshold] = useState(0.82);
   const [isSearching, setIsSearching] = useState(false);
   const [searchResult, setSearchResult] = useState(null);
   const [errorMsg, setErrorMsg] = useState(null);
+  const [isDragging, setIsDragging] = useState(false);
 
-  useEffect(() => {
-    api.getOneNoteStatus().then(status => {
-      setOneNoteStatus(status);
-    }).catch(() => {});
-  }, []);
-
-  // Modal inspection state
+  // Modal State for AI Tensor / Structural Edge map
   const [modalData, setModalData] = useState({
     isOpen: false,
     originalUrl: '',
@@ -43,132 +40,184 @@ export default function SearchDesign() {
 
   const fileInputRef = useRef(null);
 
-  const handleFileChange = (e) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      setSelectedFile(file);
-      setPreviewUrl(URL.createObjectURL(file));
-      setSearchResult(null);
-      setErrorMsg(null);
+  const handleFileSelect = (file) => {
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      setErrorMsg('Please select a valid image file (JPEG, PNG, WebP).');
+      return;
     }
+    setErrorMsg(null);
+    setSelectedFile(file);
+    const objectUrl = URL.createObjectURL(file);
+    setPreviewUrl(objectUrl);
   };
 
   const handleDrop = (e) => {
     e.preventDefault();
-    const file = e.dataTransfer.files?.[0];
-    if (file) {
-      setSelectedFile(file);
-      setPreviewUrl(URL.createObjectURL(file));
-      setSearchResult(null);
-      setErrorMsg(null);
-    }
-  };
-
-  const executeSearch = async () => {
-    if (!selectedFile) {
-      setErrorMsg('Please select or upload a saree design image first.');
-      return;
-    }
-
-    setIsSearching(true);
-    setErrorMsg(null);
-
-    try {
-      const res = await api.searchByImage(selectedFile, threshold, 6);
-      setSearchResult(res);
-    } catch (err) {
-      setErrorMsg(err.message || 'Search execution failed');
-    } finally {
-      setIsSearching(false);
+    setIsDragging(false);
+    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+      handleFileSelect(e.dataTransfer.files[0]);
     }
   };
 
   const resetSearch = () => {
     setSelectedFile(null);
+    if (previewUrl) URL.revokeObjectURL(previewUrl);
     setPreviewUrl(null);
     setSearchResult(null);
     setErrorMsg(null);
+    if (fileInputRef.current) fileInputRef.current.value = '';
   };
+
+  const executeSearch = async () => {
+    if (!selectedFile) {
+      setErrorMsg('Please upload a saree photo to begin searching.');
+      return;
+    }
+    setIsSearching(true);
+    setErrorMsg(null);
+    try {
+      const res = await api.searchByImage(selectedFile, threshold, 6);
+      setSearchResult(res);
+    } catch (err) {
+      console.error('Search error:', err);
+      setErrorMsg(err.message || 'Error occurred during vector retrieval. Please verify backend connection.');
+    } finally {
+      setIsSearching(false);
+    }
+  };
+
+  // Split matches into top match and other similar designs
+  const topMatch = (searchResult?.matches && searchResult.matches.length > 0) ? searchResult.matches[0] : null;
+  const otherMatches = (searchResult?.matches && searchResult.matches.length > 1) ? searchResult.matches.slice(1) : [];
 
   return (
     <div className="page-container" id="search-design-page">
-      {/* Top Banner */}
-      <div style={{ marginBottom: '28px' }}>
-        <h2 style={{ fontSize: '1.65rem', color: '#fff', display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <Search size={26} style={{ color: 'var(--gold-primary)' }} /> Visual Saree Design Search
-        </h2>
-        <p style={{ color: 'var(--text-muted)', fontSize: '0.88rem', marginTop: '4px' }}>
-          Upload any saree photograph, loom artwork, or fabric sample. Our model extracts motif vectors, border geometry, and layout patterns while disregarding color variations.
-        </p>
-      </div>
-
-      {oneNoteStatus && !oneNoteStatus.is_connected && (
-        <div style={{
-          background: 'rgba(212, 175, 55, 0.08)',
-          border: '1px solid rgba(212, 175, 55, 0.3)',
-          borderRadius: 'var(--radius-md)',
-          padding: '12px 18px',
-          marginBottom: '20px',
-          display: 'flex',
-          alignItems: 'center',
-          gap: '10px'
-        }}>
-          <AlertCircle size={18} style={{ color: 'var(--gold-primary)', flexShrink: 0 }} />
-          <span style={{ fontSize: '0.86rem', color: '#fff' }}>
-            <strong>Microsoft OneNote Not Connected:</strong> Connect your OneNote in Data Sources to index and search saree designs from your account.
-          </span>
+      {/* 1. UPLOAD & QUERY SPECIFICATION CARD */}
+      <div className="saas-card" style={{ marginBottom: '32px' }}>
+        <div style={{ marginBottom: '22px' }}>
+          <h2 style={{ fontSize: '1.55rem', fontWeight: 800, color: 'var(--text-main)', marginBottom: '6px', display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <Search size={24} style={{ color: 'var(--primary-purple)' }} />
+            Visual Saree Motif &amp; Pattern Search
+          </h2>
+          <p style={{ fontSize: '0.88rem', color: 'var(--text-secondary)', lineHeight: 1.5 }}>
+            Upload any saree photograph, pallu close-up, border swatch, or loom artwork. Our neural model extracts motif vectors and layout geometry &mdash; completely invariant to color variations.
+          </p>
         </div>
-      )}
 
-      {/* Upload Zone & Settings Card */}
-      <div className="upload-card">
+        {/* Drag and Drop Zone */}
         <div 
-          className="dropzone" 
-          id="search-dropzone"
-          onDragOver={(e) => e.preventDefault()}
+          className={`upload-dropzone ${isDragging ? 'drag-active' : ''}`}
+          id="dropzone-area"
+          onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
+          onDragLeave={() => setIsDragging(false)}
           onDrop={handleDrop}
-          onClick={() => fileInputRef.current?.click()}
+          onClick={() => !previewUrl && fileInputRef.current && fileInputRef.current.click()}
         >
           <input 
             type="file" 
             ref={fileInputRef} 
-            onChange={handleFileChange} 
-            accept="image/*" 
-            style={{ display: 'none' }} 
-            id="file-input-saree"
+            onChange={(e) => e.target.files && handleFileSelect(e.target.files[0])}
+            accept="image/*"
+            style={{ display: 'none' }}
+            id="query-file-input"
           />
 
-          {previewUrl ? (
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px' }}>
-              <div style={{ width: '140px', height: '140px', borderRadius: 'var(--radius-md)', overflow: 'hidden', border: '2px solid var(--gold-primary)', boxShadow: 'var(--shadow-gold)' }}>
-                <img src={previewUrl} alt="Preview" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+          {!previewUrl ? (
+            <div>
+              <div className="upload-icon-circle">
+                <UploadCloud size={34} style={{ color: 'var(--primary-purple)' }} />
               </div>
-              <div style={{ color: 'var(--gold-light)', fontWeight: 600, fontSize: '0.95rem' }}>
-                {selectedFile?.name}
+              <div className="upload-main-text">
+                Drag &amp; drop your saree image here
               </div>
-              <div style={{ fontSize: '0.8rem', color: 'var(--text-dim)' }}>
-                Click or drag another image to replace
-              </div>
-            </div>
-          ) : (
-            <>
-              <div className="dropzone-icon">
-                <UploadCloud size={32} />
-              </div>
-              <div className="dropzone-title">Drag & drop your saree image here</div>
-              <div className="dropzone-desc">
-                Supports JPG, PNG, WEBP. Focuses on motifs, borders, and jaal patterns — invariant to color variations.
+              <div className="upload-sub-text">
+                Supports JPG, PNG, WEBP fabric swatches up to 25MB. Touch to capture from camera on mobile.
               </div>
               <button 
                 type="button" 
-                className="btn-secondary" 
-                onClick={(e) => { e.stopPropagation(); fileInputRef.current?.click(); }}
-                id="btn-browse-file"
+                className="btn-secondary"
+                id="btn-browse-computer"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  fileInputRef.current?.click();
+                }}
+                style={{
+                  border: '1.5px solid var(--purple-border)',
+                  color: 'var(--primary-purple)',
+                  background: '#ffffff',
+                  fontWeight: 700,
+                  fontSize: '0.86rem',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  padding: '9px 20px',
+                  borderRadius: 'var(--radius-md)',
+                  boxShadow: 'var(--shadow-xs)'
+                }}
               >
-                <ImageIcon size={15} /> Browse from Computer
+                <ImageIcon size={16} /> Browse from Computer
               </button>
-            </>
+            </div>
+          ) : (
+            <div className="query-preview-container" onClick={(e) => e.stopPropagation()}>
+              <img 
+                src={previewUrl} 
+                alt="Selected Saree Preview" 
+                className="query-preview-thumb"
+              />
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: '0.74rem', color: 'var(--primary-purple)', fontWeight: 700, textTransform: 'uppercase' }}>
+                  Query Image Selected
+                </div>
+                <div style={{ fontSize: '0.94rem', fontWeight: 700, color: 'var(--text-main)', margin: '3px 0 6px 0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {selectedFile?.name || 'Saree Query'}
+                </div>
+                <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
+                  Size: {(selectedFile?.size ? (selectedFile.size / 1024).toFixed(1) : 0)} KB &bull; Ready for AI feature extraction
+                </div>
+              </div>
+              <button 
+                onClick={resetSearch}
+                aria-label="Remove Image"
+                style={{
+                  background: 'var(--bg-subtle)',
+                  border: '1px solid var(--border-subtle)',
+                  borderRadius: 'var(--radius-full)',
+                  width: '32px',
+                  height: '32px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: 'var(--text-muted)',
+                  cursor: 'pointer'
+                }}
+              >
+                <X size={16} />
+              </button>
+            </div>
           )}
+        </div>
+
+        {/* AI Engine Clarification Notice */}
+        <div className="ai-notice-banner">
+          <div style={{
+            width: '34px',
+            height: '34px',
+            borderRadius: 'var(--radius-full)',
+            background: '#ffffff',
+            border: '1px solid var(--purple-border)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            color: 'var(--primary-purple)',
+            flexShrink: 0
+          }}>
+            <Sparkles size={16} />
+          </div>
+          <p>
+            <strong>Color-Invariant Intelligence:</strong> Our neural vision pipeline decomposes images into structural edge tensors and DINOv2 spatial tokens. Matching focuses exclusively on <strong>motifs, borders, pallu, weave density, and layout</strong> — completely ignoring fabric color differences.
+          </p>
         </div>
 
         {/* Action Controls & Threshold Slider */}
@@ -182,12 +231,23 @@ export default function SearchDesign() {
           paddingTop: '20px',
           borderTop: '1px solid var(--border-subtle)'
         }}>
-          {/* Threshold slider */}
+          {/* Threshold Slider */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
-            <Sliders size={18} style={{ color: 'var(--gold-primary)' }} />
+            <Sliders size={18} style={{ color: 'var(--primary-purple)' }} />
             <div>
-              <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-                Match Confidence Threshold: <strong style={{ color: '#fff' }}>{Math.round(threshold * 100)}%</strong>
+              <div style={{ fontSize: '0.84rem', color: 'var(--text-secondary)', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span>Match Confidence Threshold:</span>
+                <span style={{ 
+                  background: 'var(--purple-light)', 
+                  color: 'var(--primary-purple)', 
+                  border: '1px solid var(--purple-border)', 
+                  padding: '2px 8px', 
+                  borderRadius: 'var(--radius-sm)', 
+                  fontWeight: 800,
+                  fontSize: '0.84rem'
+                }}>
+                  {Math.round(threshold * 100)}%
+                </span>
               </div>
               <input 
                 id="threshold-slider"
@@ -197,15 +257,20 @@ export default function SearchDesign() {
                 step="0.01" 
                 value={threshold} 
                 onChange={(e) => setThreshold(parseFloat(e.target.value))}
-                style={{ width: '180px', accentColor: 'var(--gold-primary)', cursor: 'pointer' }}
+                style={{ width: '200px', accentColor: 'var(--primary-purple)', cursor: 'pointer', marginTop: '6px' }}
               />
             </div>
           </div>
 
           {/* Action Buttons */}
-          <div style={{ display: 'flex', gap: '12px' }}>
+          <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
             {previewUrl && (
-              <button className="btn-secondary" onClick={resetSearch} id="btn-reset-search">
+              <button 
+                className="btn-secondary" 
+                onClick={resetSearch} 
+                id="btn-reset-search"
+                style={{ padding: '11px 18px', fontSize: '0.88rem', fontWeight: 600 }}
+              >
                 <RotateCcw size={15} /> Reset
               </button>
             )}
@@ -214,25 +279,49 @@ export default function SearchDesign() {
               className="btn-primary" 
               onClick={executeSearch}
               disabled={isSearching || !selectedFile}
-              style={{ opacity: isSearching || !selectedFile ? 0.6 : 1 }}
+              style={{ 
+                opacity: isSearching || !selectedFile ? 0.65 : 1,
+                padding: '11px 24px',
+                fontSize: '0.92rem',
+                fontWeight: 700,
+                boxShadow: !selectedFile ? 'none' : '0 4px 16px rgba(109, 40, 217, 0.28)'
+              }}
             >
               {isSearching ? (
-                <>Searching Vector Index...</>
+                <>
+                  <Sparkles size={18} className="spinner" />
+                  <span>Extracting AI Motifs...</span>
+                </>
               ) : (
-                <><Search size={16} /> Find Matching Designs</>
+                <>
+                  <Search size={18} />
+                  <span>Find Matching Designs</span>
+                </>
               )}
             </button>
           </div>
         </div>
 
+        {/* Error Message */}
         {errorMsg && (
-          <div style={{ marginTop: '16px', padding: '12px 16px', background: 'rgba(239, 68, 68, 0.15)', border: '1px solid var(--accent-crimson)', borderRadius: 'var(--radius-md)', color: '#fca5a5', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <div style={{ 
+            marginTop: '18px', 
+            padding: '12px 16px', 
+            background: 'var(--crimson-light)', 
+            border: '1px solid var(--crimson-border)', 
+            borderRadius: 'var(--radius-md)', 
+            color: 'var(--accent-crimson)', 
+            fontSize: '0.85rem', 
+            display: 'flex', 
+            alignItems: 'center', 
+            gap: '8px' 
+          }}>
             <AlertCircle size={16} /> {errorMsg}
           </div>
         )}
       </div>
 
-      {/* SEARCH RESULTS SECTION */}
+      {/* 2. SEARCH RESULTS SECTION */}
       {searchResult && (
         <div id="search-results-section">
           {/* Status Banner */}
@@ -242,33 +331,61 @@ export default function SearchDesign() {
           >
             <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
               {searchResult.is_strong_match ? (
-                <CheckCircle2 size={24} style={{ color: 'var(--accent-emerald)', flexShrink: 0 }} />
+                <CheckCircle2 size={26} style={{ color: 'var(--accent-emerald)', flexShrink: 0 }} />
               ) : (
-                <AlertCircle size={24} style={{ color: 'var(--accent-crimson)', flexShrink: 0 }} />
+                <AlertCircle size={26} style={{ color: 'var(--gold-primary)', flexShrink: 0 }} />
               )}
               <div>
-                <div style={{ fontWeight: 700, fontSize: '1.1rem' }}>
+                <div style={{ fontWeight: 800, fontSize: '1.15rem' }}>
                   {searchResult.is_strong_match ? 'Design Match Confirmed in OneNote Archive!' : 'No strong design match found.'}
                 </div>
-                <div style={{ fontSize: '0.82rem', opacity: 0.9, marginTop: '2px' }}>
+                <div style={{ fontSize: '0.84rem', opacity: 0.95, marginTop: '2px' }}>
                   {searchResult.status_message} (Top result: {searchResult.top_percentage}%, Required threshold: {Math.round(searchResult.threshold * 100)}%)
                 </div>
               </div>
             </div>
-            <div style={{ textAlign: 'right', display: 'flex', alignItems: 'center', gap: '10px' }}>
-              <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-                Indexed Catalog: {searchResult.total_indexed} designs
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+              {searchResult.is_strong_match && topMatch && (
+                <button
+                  id="btn-banner-open-exact"
+                  className="btn-primary"
+                  style={{
+                    background: 'var(--accent-emerald)',
+                    borderColor: 'var(--accent-emerald)',
+                    color: '#ffffff',
+                    fontSize: '0.84rem',
+                    padding: '8px 16px',
+                    fontWeight: 700
+                  }}
+                  title={`Open exact image in OneNote Desktop: ${topMatch.notebook_name} > ${topMatch.section_name} > ${topMatch.page_title || topMatch.title}`}
+                  onClick={async () => {
+                    try {
+                      const res = await api.openInOneNote(topMatch.id, 'desktop');
+                      const target = res?.client_url || topMatch.object_client_url || topMatch.onenote_client_url;
+                      if (target) window.location.href = target;
+                    } catch {
+                      const fallback = topMatch.object_client_url || topMatch.object_web_url || topMatch.onenote_web_url;
+                      if (fallback) window.location.href = fallback;
+                    }
+                  }}
+                >
+                  <ExternalLink size={14} /> Open Exact Match
+                </button>
+              )}
+              <span style={{ fontSize: '0.80rem', color: 'var(--text-muted)' }}>
+                Indexed Catalog: <strong>{searchResult.total_indexed}</strong> designs
               </span>
             </div>
           </div>
 
-          {/* Side by Side Comparison Layout */}
+          {/* Dual Comparison Layout */}
           <div className="comparison-container">
-            {/* Left: Uploaded Query Image */}
+            {/* Left: Query Card */}
             <div className="query-card" id="query-preview-card">
-              <div style={{ fontSize: '0.9rem', fontWeight: 700, color: '#fff', marginBottom: '12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div style={{ fontSize: '0.90rem', fontWeight: 700, color: 'var(--text-main)', marginBottom: '12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <span>Uploaded Saree Image</span>
-                <span style={{ fontSize: '0.72rem', color: 'var(--gold-primary)', background: 'rgba(212, 175, 55, 0.1)', padding: '2px 8px', borderRadius: '4px' }}>
+                <span style={{ fontSize: '0.72rem', color: 'var(--primary-purple)', background: 'var(--purple-light)', border: '1px solid var(--purple-border)', padding: '2px 8px', borderRadius: '4px', fontWeight: 700 }}>
                   Query Input
                 </span>
               </div>
@@ -280,7 +397,7 @@ export default function SearchDesign() {
               <button 
                 id="btn-inspect-query-tensor"
                 className="btn-secondary" 
-                style={{ width: '100%', justifyContent: 'center', fontSize: '0.8rem' }}
+                style={{ width: '100%', justifyContent: 'center', fontSize: '0.80rem', marginBottom: '14px' }}
                 onClick={() => setModalData({
                   isOpen: true,
                   originalUrl: searchResult.query_image_url,
@@ -288,127 +405,219 @@ export default function SearchDesign() {
                   title: 'Query Saree Structural & Motif Edge Tensor'
                 })}
               >
-                <Cpu size={14} style={{ color: 'var(--gold-primary)' }} /> Inspect AI Vision Tensor
+                <Cpu size={14} style={{ color: 'var(--primary-purple)' }} /> Inspect AI Vision Tensor
               </button>
 
-              <div style={{ marginTop: '16px', background: 'rgba(255, 255, 255, 0.02)', padding: '12px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-subtle)' }}>
-                <div style={{ fontSize: '0.75rem', color: 'var(--text-dim)', marginBottom: '4px' }}>ENGINE VERIFICATION:</div>
-                <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', lineHeight: '1.4' }}>
-                  Extracted 1536-dimensional DINOv2 color-invariant motif embedding (4-Zone Spatial Pooling). Matching against historical designs via FAISS.
+              <div style={{ background: 'var(--bg-subtle)', padding: '12px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)' }}>
+                <div style={{ fontSize: '0.72rem', color: 'var(--text-dim)', fontWeight: 700, letterSpacing: '0.04em' }}>
+                  NEURAL VERIFICATION
+                </div>
+                <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', lineHeight: '1.45', marginTop: '4px' }}>
+                  Extracted 1536-D DINOv2 color-invariant motif embedding (4-zone spatial pooling: Top Border, Field Jaal, Bottom Border &amp; Pallu).
                 </div>
               </div>
             </div>
 
-            {/* Right: Matches Grid */}
+            {/* Right: Results Cards */}
             <div>
-              <div style={{ fontSize: '1.05rem', fontWeight: 700, color: '#fff', marginBottom: '16px' }}>
-                Historical OneNote Matches ({searchResult.matches.length})
-              </div>
-
               {searchResult.matches.length === 0 ? (
-                <div style={{ padding: '40px', background: 'var(--surface-card)', borderRadius: 'var(--radius-lg)', textAlign: 'center', color: 'var(--text-muted)' }}>
-                  No indexed designs found. Please connect OneNote or upload an archive to populate the catalog.
+                <div className="saas-card" style={{ textAlign: 'center', padding: '50px', color: 'var(--text-muted)' }}>
+                  No indexed designs found. Please connect your OneNote account in OneNote Integration to populate the catalog.
                 </div>
               ) : (
-                <div className="matches-grid">
-                  {searchResult.matches.map((match, idx) => {
-                    const isTop = idx === 0 && searchResult.is_strong_match;
-                    const scoreClass = match.similarity_percentage >= 80 
-                      ? 'score-high' 
-                      : match.similarity_percentage >= 60 
-                        ? 'score-mid' 
-                        : 'score-low';
+                <div>
+                  {/* Highlighted Top Match */}
+                  {topMatch && (
+                    <div style={{ marginBottom: '28px' }}>
+                      <div style={{ fontSize: '1.05rem', fontWeight: 800, color: 'var(--text-main)', marginBottom: '14px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <Target size={18} style={{ color: 'var(--primary-purple)' }} />
+                        <span>Strongest Identified Match</span>
+                      </div>
 
-                    return (
-                      <div 
-                        key={match.id} 
-                        className={`match-card ${isTop ? 'is-top-match' : ''}`}
-                        id={`match-card-${match.id}`}
-                      >
-                        <div className="match-img-box">
-                          <img src={match.image_url} alt={match.title} />
-                          <div className={`match-score-badge ${scoreClass}`}>
-                            {match.similarity_percentage}% Match
+                      <div className="match-card is-top-match" id={`match-card-${topMatch.id}`}>
+                        <div className="match-img-box" style={{ aspectRatio: '1.4' }}>
+                          <img src={topMatch.image_url} alt={topMatch.title} />
+                          <div className={`match-score-badge ${topMatch.similarity_percentage >= 80 ? 'score-high' : topMatch.similarity_percentage >= 60 ? 'score-mid' : 'score-low'}`}>
+                            {topMatch.similarity_percentage}% Match
                           </div>
                         </div>
 
                         <div className="match-card-body">
-                          <div className="match-title">{match.title}</div>
-                          
-                          {/* OneNote Hierarchy: Notebook -> Section -> Page */}
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px', flexWrap: 'wrap', gap: '6px' }}>
+                            <span className="exact-image-badge" title={`Exact matched image: Position #${topMatch.image_order || 1} on OneNote page`}>
+                              <Target size={12} style={{ color: 'var(--gold-primary)' }} />
+                              Exact Match: Image #{topMatch.image_order || 1} on page
+                            </span>
+                            {topMatch.resource_id && (
+                              <span style={{ fontSize: '0.70rem', color: 'var(--text-dim)', fontFamily: 'monospace' }}>
+                                ID: {topMatch.resource_id.length > 16 ? topMatch.resource_id.substring(0, 16) + '...' : topMatch.resource_id}
+                              </span>
+                            )}
+                          </div>
+
+                          <div className="match-title" style={{ fontSize: '1.1rem' }}>{topMatch.title}</div>
+
                           <OneNoteBreadcrumb 
-                            notebook={match.notebook_name} 
-                            section={match.section_name} 
-                            page={match.page_title} 
+                            notebook={topMatch.notebook_name} 
+                            section={topMatch.section_name} 
+                            page={topMatch.page_title} 
+                            imageOrder={topMatch.image_order}
                           />
 
-                          {match.colorway && (
-                            <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginBottom: '8px' }}>
-                              <strong style={{ color: 'var(--text-dim)' }}>Archived Color:</strong> {match.colorway}
+                          {topMatch.motifs && topMatch.motifs.length > 0 && (
+                            <div className="tags-row">
+                              {topMatch.motifs.map((motif, i) => (
+                                <span key={i} className="motif-tag">{motif}</span>
+                              ))}
                             </div>
                           )}
 
-                          {/* Motifs Tags */}
-                          <div className="tags-row">
-                            {match.motifs && match.motifs.map((motif, i) => (
-                              <span key={i} className="motif-tag">{motif}</span>
-                            ))}
-                          </div>
-
-                          {/* Card Footer Actions */}
                           <div className="match-card-footer">
                             <button 
                               className="btn-secondary" 
-                              style={{ padding: '6px 10px', fontSize: '0.75rem' }}
+                              style={{ padding: '6px 12px', fontSize: '0.78rem' }}
                               onClick={() => setModalData({
                                 isOpen: true,
-                                originalUrl: match.image_url,
-                                structuralUrl: match.structural_preview_url || match.image_url,
-                                title: `${match.title} - Structural Map`
+                                originalUrl: topMatch.image_url,
+                                structuralUrl: topMatch.structural_preview_url || topMatch.image_url,
+                                title: `${topMatch.title} - Structural Map`
                               })}
-                              id={`btn-inspect-match-${match.id}`}
+                              id={`btn-inspect-match-${topMatch.id}`}
                             >
-                              <Eye size={12} /> AI Map
+                              <Eye size={13} /> AI Map
                             </button>
 
-                            <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                            <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
                               <button 
-                                className="btn-onenote"
-                                id={`btn-open-onenote-${match.id}`}
-                                title={`Open exact location in Desktop OneNote: ${match.notebook_name} > ${match.section_name} > ${match.page_title || match.title}`}
+                                className="btn-primary"
+                                id={`btn-open-onenote-${topMatch.id}`}
+                                title={`Open exact matched image in OneNote Desktop: ${topMatch.notebook_name} > ${topMatch.section_name} > ${topMatch.page_title || topMatch.title}`}
                                 onClick={async (e) => {
                                   e.preventDefault();
                                   try {
-                                    const res = await api.openInOneNote(match.id, 'desktop');
-                                    if (res && res.client_url) {
-                                      window.location.href = res.client_url;
-                                    }
+                                    const res = await api.openInOneNote(topMatch.id, 'desktop');
+                                    const target = res?.client_url || topMatch.object_client_url || topMatch.onenote_client_url;
+                                    if (target) window.location.href = target;
                                   } catch (err) {
-                                    console.error('OneNote desktop launch error:', err);
+                                    console.error('OneNote exact match redirect error:', err);
+                                    const fallback = topMatch.object_client_url || topMatch.object_web_url || topMatch.onenote_web_url;
+                                    if (fallback) window.location.href = fallback;
                                   }
                                 }}
-                                style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}
                               >
-                                <ExternalLink size={13} /> Open in OneNote
+                                <ExternalLink size={14} /> Open Exact Match in OneNote
                               </button>
 
                               <a
-                                href={getCleanOneNoteWebUrl(match)}
+                                href={topMatch.object_web_url || topMatch.onenote_web_url || getCleanOneNoteWebUrl(topMatch)}
                                 target="_blank"
                                 rel="noopener noreferrer"
                                 className="btn-secondary"
-                                style={{ padding: '6px 9px', fontSize: '0.75rem', display: 'inline-flex', alignItems: 'center', textDecoration: 'none' }}
-                                title="Open in OneNote Online (Browser)"
-                                id={`btn-open-web-${match.id}`}
+                                style={{ padding: '8px 12px', fontSize: '0.78rem' }}
+                                title="Open exact image in OneNote Online"
+                                id={`btn-open-web-${topMatch.id}`}
                               >
-                                <Globe size={13} />
+                                <Globe size={14} />
                               </a>
                             </div>
                           </div>
                         </div>
                       </div>
-                    );
-                  })}
+                    </div>
+                  )}
+
+                  {/* Other Similar Designs */}
+                  {otherMatches.length > 0 && (
+                    <div>
+                      <div style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--text-main)', marginBottom: '14px' }}>
+                        Other Similar Designs in Archive ({otherMatches.length})
+                      </div>
+
+                      <div className="matches-grid">
+                        {otherMatches.map((match) => {
+                          const scoreClass = match.similarity_percentage >= 80 
+                            ? 'score-high' 
+                            : match.similarity_percentage >= 60 
+                              ? 'score-mid' 
+                              : 'score-low';
+
+                          return (
+                            <div 
+                              key={match.id} 
+                              className="match-card"
+                              id={`match-card-${match.id}`}
+                            >
+                              <div className="match-img-box">
+                                <img src={match.image_url} alt={match.title} />
+                                <div className={`match-score-badge ${scoreClass}`}>
+                                  {match.similarity_percentage}% Match
+                                </div>
+                              </div>
+
+                              <div className="match-card-body">
+                                <div className="match-title">{match.title}</div>
+                                
+                                <OneNoteBreadcrumb 
+                                  notebook={match.notebook_name} 
+                                  section={match.section_name} 
+                                  page={match.page_title} 
+                                  imageOrder={match.image_order}
+                                />
+
+                                <div className="match-card-footer">
+                                  <button 
+                                    className="btn-secondary" 
+                                    style={{ padding: '6px 10px', fontSize: '0.75rem' }}
+                                    onClick={() => setModalData({
+                                      isOpen: true,
+                                      originalUrl: match.image_url,
+                                      structuralUrl: match.structural_preview_url || match.image_url,
+                                      title: `${match.title} - Structural Map`
+                                    })}
+                                    id={`btn-inspect-match-${match.id}`}
+                                  >
+                                    <Eye size={12} /> AI Map
+                                  </button>
+
+                                  <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                                    <button 
+                                      className="btn-onenote"
+                                      id={`btn-open-onenote-${match.id}`}
+                                      title={`Open in OneNote Desktop`}
+                                      onClick={async (e) => {
+                                        e.preventDefault();
+                                        try {
+                                          const res = await api.openInOneNote(match.id, 'desktop');
+                                          const target = res?.client_url || match.object_client_url || match.onenote_client_url;
+                                          if (target) window.location.href = target;
+                                        } catch {
+                                          const fallback = match.object_client_url || match.object_web_url || match.onenote_web_url;
+                                          if (fallback) window.location.href = fallback;
+                                        }
+                                      }}
+                                    >
+                                      <ExternalLink size={12} /> Open
+                                    </button>
+
+                                    <a
+                                      href={match.object_web_url || match.onenote_web_url || getCleanOneNoteWebUrl(match)}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="btn-secondary"
+                                      style={{ padding: '6px 9px', fontSize: '0.75rem' }}
+                                      title="Open in OneNote Online"
+                                    >
+                                      <Globe size={12} />
+                                    </a>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -416,7 +625,7 @@ export default function SearchDesign() {
         </div>
       )}
 
-      {/* Structural Map Inspection Modal */}
+      {/* 3. STRUCTURAL MAP INSPECTION MODAL */}
       <StructuralMapModal 
         isOpen={modalData.isOpen}
         onClose={() => setModalData({ ...modalData, isOpen: false })}

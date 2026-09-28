@@ -42,8 +42,15 @@ class DesignRecord(Base):
     notebook_name = Column(String(255), index=True)
     section_name = Column(String(255), index=True)
     page_title = Column(String(255))
-    onenote_web_url = Column(Text, nullable=True)
-    onenote_client_url = Column(Text, nullable=True)
+    page_id = Column(String(255), nullable=True)
+    object_id = Column(String(255), nullable=True) # OneNote page-content object ID / data-id
+    image_order = Column(Integer, default=1)
+    resource_id = Column(String(255), nullable=True)
+    resource_url = Column(Text, nullable=True) # Binary attachment download URL from Microsoft Graph
+    object_client_url = Column(Text, nullable=True) # Object-level desktop hyperlink
+    object_web_url = Column(Text, nullable=True) # Object-level web hyperlink
+    onenote_web_url = Column(Text, nullable=True) # Fallback page web URL
+    onenote_client_url = Column(Text, nullable=True) # Fallback page client URL
     image_url = Column(String(512))
     structural_preview_url = Column(String(512), nullable=True)
     category = Column(String(128), default="Traditional")
@@ -69,6 +76,10 @@ class SearchHistoryRecord(Base):
     notebook_name = Column(String(255), nullable=True)
     section_name = Column(String(255), nullable=True)
     page_title = Column(String(255), nullable=True)
+    top_match_page_id = Column(String(255), nullable=True)
+    top_match_object_id = Column(String(255), nullable=True)
+    top_match_object_url = Column(Text, nullable=True)
+    top_match_order = Column(Integer, nullable=True)
     onenote_web_url = Column(Text, nullable=True)
 
 class SettingsRecord(Base):
@@ -92,12 +103,34 @@ def _migrate_sqlite_columns():
         design_cols = [row[1] for row in cursor.fetchall()]
         if "user_id" not in design_cols:
             cursor.execute("ALTER TABLE designs ADD COLUMN user_id VARCHAR(64)")
+        if "page_id" not in design_cols:
+            cursor.execute("ALTER TABLE designs ADD COLUMN page_id VARCHAR(255)")
+        if "object_id" not in design_cols:
+            cursor.execute("ALTER TABLE designs ADD COLUMN object_id VARCHAR(255)")
+        if "image_order" not in design_cols:
+            cursor.execute("ALTER TABLE designs ADD COLUMN image_order INTEGER DEFAULT 1")
+        if "resource_id" not in design_cols:
+            cursor.execute("ALTER TABLE designs ADD COLUMN resource_id VARCHAR(255)")
+        if "resource_url" not in design_cols:
+            cursor.execute("ALTER TABLE designs ADD COLUMN resource_url TEXT")
+        if "object_client_url" not in design_cols:
+            cursor.execute("ALTER TABLE designs ADD COLUMN object_client_url TEXT")
+        if "object_web_url" not in design_cols:
+            cursor.execute("ALTER TABLE designs ADD COLUMN object_web_url TEXT")
             
         # Check search_history table columns
         cursor.execute("PRAGMA table_info(search_history)")
         history_cols = [row[1] for row in cursor.fetchall()]
         if "user_id" not in history_cols:
             cursor.execute("ALTER TABLE search_history ADD COLUMN user_id VARCHAR(64)")
+        if "top_match_page_id" not in history_cols:
+            cursor.execute("ALTER TABLE search_history ADD COLUMN top_match_page_id VARCHAR(255)")
+        if "top_match_object_id" not in history_cols:
+            cursor.execute("ALTER TABLE search_history ADD COLUMN top_match_object_id VARCHAR(255)")
+        if "top_match_object_url" not in history_cols:
+            cursor.execute("ALTER TABLE search_history ADD COLUMN top_match_object_url TEXT")
+        if "top_match_order" not in history_cols:
+            cursor.execute("ALTER TABLE search_history ADD COLUMN top_match_order INTEGER")
 
         conn.commit()
         conn.close()
