@@ -38,9 +38,9 @@ export default function StructuralMapModal({ isOpen, onClose, originalUrl, struc
               <Cpu size={22} />
             </div>
             <div>
-              <h3 style={{ fontSize: '1.2rem', color: 'var(--text-main)', margin: 0 }}>AI Vision Structural Map</h3>
+              <h3 style={{ fontSize: '1.2rem', color: 'var(--text-main)', margin: 0 }}>Pattern &amp; Motif Map</h3>
               <p style={{ fontSize: '0.80rem', color: 'var(--text-muted)', margin: '2px 0 0 0' }}>
-                {title || 'Color-Invariant Motif & Edge Inspection'}
+                {title || 'Visual Pattern Inspection'}
               </p>
             </div>
           </div>
@@ -74,7 +74,7 @@ export default function StructuralMapModal({ isOpen, onClose, originalUrl, struc
         }}>
           <div>
             <div style={{ fontSize: '0.84rem', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: '8px' }}>
-              Original Fabric (Colorway)
+              Original Image
             </div>
             <div style={{ 
               borderRadius: 'var(--radius-lg)', 
@@ -90,7 +90,7 @@ export default function StructuralMapModal({ isOpen, onClose, originalUrl, struc
 
           <div>
             <div style={{ fontSize: '0.84rem', fontWeight: 700, color: 'var(--primary-purple)', marginBottom: '8px' }}>
-              AI Structural Map (Color Discarded)
+              Extracted Pattern
             </div>
             <div style={{ 
               borderRadius: 'var(--radius-lg)', 
@@ -113,10 +113,10 @@ export default function StructuralMapModal({ isOpen, onClose, originalUrl, struc
           padding: '18px' 
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px', color: 'var(--primary-purple)', fontWeight: 700, fontSize: '0.9rem' }}>
-            <ShieldCheck size={18} /> How Color-Invariant Matching Works
+            <ShieldCheck size={18} /> How Matching Works
           </div>
           <p style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', lineHeight: '1.55' }}>
-            The AI Saree Design Engine eliminates chromatic channels (Hue &amp; Saturation) and decomposes the image into a 3-channel structural tensor comprising CLAHE contrast-normalized luminance, Sobel gradient edge magnitudes (for motif contours and temple spires), and adaptive texture channels (for jacquard weave patterns). This representation is processed through Meta's DINOv2 Self-Supervised Vision Transformer with 4-zone spatial motif pooling (Top Border, Body Field Jaal/Motifs, Bottom Border &amp; Pallu), allowing the exact same design in completely different colorways (e.g., Pink vs. Peacock Blue) to match with &gt;95% similarity while cleanly rejecting unrelated motifs.
+            Colors are filtered out so matching focuses only on weave patterns, motifs, and borders. The same design in different colors will still match.
           </p>
         </div>
       </div>

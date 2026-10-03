@@ -1,17 +1,17 @@
 import React, { useState, useRef, useMemo } from 'react';
-import { 
-  UploadCloud, 
-  Search, 
-  RotateCcw, 
-  ExternalLink, 
-  Eye, 
-  Sliders, 
-  CheckCircle2, 
-  AlertCircle, 
-  Sparkles, 
-  Target, 
-  Globe, 
-  Cpu, 
+import {
+  UploadCloud,
+  Search,
+  RotateCcw,
+  ExternalLink,
+  Eye,
+  Sliders,
+  CheckCircle2,
+  AlertCircle,
+  Sparkles,
+  Target,
+  Globe,
+  Cpu,
   Image as ImageIcon,
   X,
   Layers,
@@ -136,15 +136,15 @@ export default function SearchDesign() {
         <div style={{ marginBottom: '22px' }}>
           <h2 style={{ fontSize: '1.55rem', fontWeight: 800, color: 'var(--text-main)', marginBottom: '6px', display: 'flex', alignItems: 'center', gap: '10px' }}>
             <Search size={24} style={{ color: 'var(--primary-purple)' }} />
-            Visual Saree Motif &amp; Pattern Search
+            Visual Saree Design Search
           </h2>
           <p style={{ fontSize: '0.88rem', color: 'var(--text-secondary)', lineHeight: 1.5 }}>
-            Upload any saree photograph, pallu close-up, border swatch, or loom artwork. Our neural model extracts motif vectors and layout geometry &mdash; completely invariant to color variations.
+            Upload a saree photo, pallu, border, fabric sample, or design sketch. Our AI identifies the key design patterns and finds matching saree designs&mdash;even when the colors are different.
           </p>
         </div>
 
         {/* Drag and Drop Zone */}
-        <div 
+        <div
           className={`upload-dropzone ${isDragging ? 'drag-active' : ''}`}
           id="dropzone-area"
           onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
@@ -152,9 +152,9 @@ export default function SearchDesign() {
           onDrop={handleDrop}
           onClick={() => !previewUrl && fileInputRef.current && fileInputRef.current.click()}
         >
-          <input 
-            type="file" 
-            ref={fileInputRef} 
+          <input
+            type="file"
+            ref={fileInputRef}
             onChange={(e) => e.target.files && handleFileSelect(e.target.files[0])}
             accept="image/*"
             style={{ display: 'none' }}
@@ -172,8 +172,8 @@ export default function SearchDesign() {
               <div className="upload-sub-text">
                 Supports JPG, PNG, WEBP fabric swatches up to 25MB. Touch to capture from camera on mobile.
               </div>
-              <button 
-                type="button" 
+              <button
+                type="button"
                 className="btn-secondary"
                 id="btn-browse-computer"
                 onClick={(e) => {
@@ -199,9 +199,9 @@ export default function SearchDesign() {
             </div>
           ) : (
             <div className="query-preview-container" onClick={(e) => e.stopPropagation()}>
-              <img 
-                src={previewUrl} 
-                alt="Selected Saree Preview" 
+              <img
+                src={previewUrl}
+                alt="Selected Saree Preview"
                 className="query-preview-thumb"
               />
               <div style={{ flex: 1, minWidth: 0 }}>
@@ -215,7 +215,7 @@ export default function SearchDesign() {
                   Size: {(selectedFile?.size ? (selectedFile.size / 1024).toFixed(1) : 0)} KB &bull; Ready for AI feature extraction
                 </div>
               </div>
-              <button 
+              <button
                 onClick={resetSearch}
                 aria-label="Remove Image"
                 style={{
@@ -254,16 +254,16 @@ export default function SearchDesign() {
             <Sparkles size={16} />
           </div>
           <p>
-            <strong>Color-Invariant Intelligence:</strong> Our neural vision pipeline decomposes images into structural edge tensors and DINOv2 spatial tokens. Matching focuses exclusively on <strong>motifs, borders, pallu, weave density, and layout</strong> — completely ignoring fabric color differences.
+            <strong>Smart Color-Independent Matching:</strong> The search focuses on motifs, borders, pallu, patterns, and overall design rather than color, helping you find the same design across different color variations.
           </p>
         </div>
 
         {/* Action Controls & Threshold Slider */}
-        <div className="search-controls-bar" style={{ 
-          marginTop: '24px', 
-          display: 'flex', 
-          alignItems: 'center', 
-          justifyContent: 'space-between', 
+        <div className="search-controls-bar" style={{
+          marginTop: '24px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
           flexWrap: 'wrap',
           gap: '16px',
           paddingTop: '20px',
@@ -275,25 +275,25 @@ export default function SearchDesign() {
             <div style={{ flex: 1 }}>
               <div style={{ fontSize: '0.84rem', color: 'var(--text-secondary)', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                 <span>Match Confidence Threshold:</span>
-                <span style={{ 
-                  background: 'var(--purple-light)', 
-                  color: 'var(--primary-purple)', 
-                  border: '1px solid var(--purple-border)', 
-                  padding: '2px 8px', 
-                  borderRadius: 'var(--radius-sm)', 
+                <span style={{
+                  background: 'var(--purple-light)',
+                  color: 'var(--primary-purple)',
+                  border: '1px solid var(--purple-border)',
+                  padding: '2px 8px',
+                  borderRadius: 'var(--radius-sm)',
                   fontWeight: 800,
                   fontSize: '0.84rem'
                 }}>
                   {Math.round(threshold * 100)}%
                 </span>
               </div>
-              <input 
+              <input
                 id="threshold-slider"
-                type="range" 
-                min="0.50" 
-                max="1.00" 
-                step="0.01" 
-                value={threshold} 
+                type="range"
+                min="0.50"
+                max="1.00"
+                step="0.01"
+                value={threshold}
                 onChange={(e) => setThreshold(parseFloat(e.target.value))}
                 className="threshold-slider-input"
                 style={{ width: '200px', accentColor: 'var(--primary-purple)', cursor: 'pointer', marginTop: '6px' }}
@@ -304,21 +304,21 @@ export default function SearchDesign() {
           {/* Action Buttons */}
           <div className="search-action-btns" style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
             {previewUrl && (
-              <button 
-                className="btn-secondary" 
-                onClick={resetSearch} 
+              <button
+                className="btn-secondary"
+                onClick={resetSearch}
                 id="btn-reset-search"
                 style={{ padding: '11px 18px', fontSize: '0.88rem', fontWeight: 600 }}
               >
                 <RotateCcw size={15} /> Reset
               </button>
             )}
-            <button 
+            <button
               id="btn-find-matching-designs"
-              className="btn-primary" 
+              className="btn-primary"
               onClick={executeSearch}
               disabled={isSearching || !selectedFile}
-              style={{ 
+              style={{
                 opacity: isSearching || !selectedFile ? 0.65 : 1,
                 padding: '11px 24px',
                 fontSize: '0.92rem',
@@ -343,17 +343,17 @@ export default function SearchDesign() {
 
         {/* Error Message */}
         {errorMsg && (
-          <div style={{ 
-            marginTop: '18px', 
-            padding: '12px 16px', 
-            background: 'var(--crimson-light)', 
-            border: '1px solid var(--crimson-border)', 
-            borderRadius: 'var(--radius-md)', 
-            color: 'var(--accent-crimson)', 
-            fontSize: '0.85rem', 
-            display: 'flex', 
-            alignItems: 'center', 
-            gap: '8px' 
+          <div style={{
+            marginTop: '18px',
+            padding: '12px 16px',
+            background: 'var(--crimson-light)',
+            border: '1px solid var(--crimson-border)',
+            borderRadius: 'var(--radius-md)',
+            color: 'var(--accent-crimson)',
+            fontSize: '0.85rem',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px'
           }}>
             <AlertCircle size={16} /> {errorMsg}
           </div>
@@ -364,7 +364,7 @@ export default function SearchDesign() {
       {searchResult && (
         <div id="search-results-section">
           {/* Status Banner */}
-          <div 
+          <div
             id="search-status-banner"
             className={`results-header-banner ${isMatchFound ? 'banner-match-strong' : 'banner-no-match'}`}
           >
@@ -430,9 +430,9 @@ export default function SearchDesign() {
                 <img src={searchResult.query_image_url} alt="Uploaded Saree Query" />
               </div>
 
-              <button 
+              <button
                 id="btn-inspect-query-tensor"
-                className="btn-secondary" 
+                className="btn-secondary"
                 style={{ width: '100%', justifyContent: 'center', fontSize: '0.80rem', marginBottom: '14px' }}
                 onClick={() => setModalData({
                   isOpen: true,
@@ -461,12 +461,12 @@ export default function SearchDesign() {
                   No indexed designs found. Please connect your OneNote account in OneNote Integration to populate the catalog.
                 </div>
               ) : filteredMatches.length === 0 ? (
-                <div 
+                <div
                   id="no-threshold-matches"
-                  className="saas-card" 
-                  style={{ 
-                    textAlign: 'center', 
-                    padding: '50px 30px', 
+                  className="saas-card"
+                  style={{
+                    textAlign: 'center',
+                    padding: '50px 30px',
                     color: 'var(--text-secondary)',
                     borderRadius: 'var(--radius-lg)',
                     border: '1px solid var(--border-subtle)',
@@ -525,10 +525,10 @@ export default function SearchDesign() {
 
                           <div className="match-title" style={{ fontSize: '1.1rem' }}>{topMatch.title}</div>
 
-                          <OneNoteBreadcrumb 
-                            notebook={topMatch.notebook_name} 
-                            section={topMatch.section_name} 
-                            page={topMatch.page_title} 
+                          <OneNoteBreadcrumb
+                            notebook={topMatch.notebook_name}
+                            section={topMatch.section_name}
+                            page={topMatch.page_title}
                             imageOrder={topMatch.image_order}
                             item={topMatch}
                             copyUrl={getExactPageWebUrl(topMatch)}
@@ -543,8 +543,8 @@ export default function SearchDesign() {
                           )}
 
                           <div className="match-card-footer">
-                            <button 
-                              className="btn-secondary" 
+                            <button
+                              className="btn-secondary"
                               style={{ padding: '6px 12px', fontSize: '0.78rem' }}
                               onClick={() => setModalData({
                                 isOpen: true,
@@ -558,7 +558,7 @@ export default function SearchDesign() {
                             </button>
 
                             <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                              <button 
+                              <button
                                 className="btn-primary"
                                 id={`btn-open-onenote-${topMatch.id}`}
                                 title={`Open exact matched page in OneNote: ${topMatch.notebook_name} > ${topMatch.section_name} > ${topMatch.page_title || topMatch.title}`}
@@ -598,15 +598,15 @@ export default function SearchDesign() {
 
                       <div className="matches-grid">
                         {otherMatches.map((match) => {
-                          const scoreClass = match.similarity_percentage >= 80 
-                            ? 'score-high' 
-                            : match.similarity_percentage >= 60 
-                              ? 'score-mid' 
+                          const scoreClass = match.similarity_percentage >= 80
+                            ? 'score-high'
+                            : match.similarity_percentage >= 60
+                              ? 'score-mid'
                               : 'score-low';
 
                           return (
-                            <div 
-                              key={match.id} 
+                            <div
+                              key={match.id}
                               className="match-card"
                               id={`match-card-${match.id}`}
                             >
@@ -619,19 +619,19 @@ export default function SearchDesign() {
 
                               <div className="match-card-body">
                                 <div className="match-title">{match.title}</div>
-                                
-                                <OneNoteBreadcrumb 
-                                  notebook={match.notebook_name} 
-                                  section={match.section_name} 
-                                  page={match.page_title} 
+
+                                <OneNoteBreadcrumb
+                                  notebook={match.notebook_name}
+                                  section={match.section_name}
+                                  page={match.page_title}
                                   imageOrder={match.image_order}
                                   item={match}
                                   copyUrl={getExactPageWebUrl(match)}
                                 />
 
                                 <div className="match-card-footer">
-                                  <button 
-                                    className="btn-secondary" 
+                                  <button
+                                    className="btn-secondary"
                                     style={{ padding: '6px 10px', fontSize: '0.75rem' }}
                                     onClick={() => setModalData({
                                       isOpen: true,
@@ -645,7 +645,7 @@ export default function SearchDesign() {
                                   </button>
 
                                   <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
-                                    <button 
+                                    <button
                                       className="btn-onenote"
                                       id={`btn-open-onenote-${match.id}`}
                                       title="Open Exact Match in OneNote"
@@ -685,7 +685,7 @@ export default function SearchDesign() {
       )}
 
       {/* 3. STRUCTURAL MAP INSPECTION MODAL */}
-      <StructuralMapModal 
+      <StructuralMapModal
         isOpen={modalData.isOpen}
         onClose={() => setModalData({ ...modalData, isOpen: false })}
         originalUrl={modalData.originalUrl}

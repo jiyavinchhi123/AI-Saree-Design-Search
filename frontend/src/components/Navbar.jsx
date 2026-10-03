@@ -8,26 +8,26 @@ export default function Navbar({ activeTab, setActiveTab, mobileNavOpen, setMobi
   useEffect(() => {
     api.getOneNoteStatus()
       .then(status => setOneNoteStatus(status))
-      .catch(() => {});
+      .catch(() => { });
   }, [activeTab]);
 
   const getPageTitle = () => {
     switch (activeTab) {
-      case 'dashboard': return 'Dashboard Overview';
-      case 'search': return 'Visual Saree Search';
-      case 'data-sources': return 'OneNote Integration & Sync';
-      case 'history': return 'Search History & Audits';
+      case 'dashboard': return 'Dashboard';
+      case 'search': return 'Visual Saree Design Search';
+      case 'data-sources': return 'OneNote Integration';
+      case 'history': return 'Search History';
       default: return 'AI Saree Search';
     }
   };
 
   const getPageSubtitle = () => {
     switch (activeTab) {
-      case 'dashboard': return 'Find. Reuse. Preserve. • Enterprise Textile Design Intelligence';
-      case 'search': return 'Deep Vision Motif Matching • Color-Invariant Spatial Neural Net';
-      case 'data-sources': return 'Real-Time Microsoft OneNote Notebook Synchronization';
-      case 'history': return 'Audit Logs of Uploaded Saree Design Queries';
-      default: return 'Enterprise Visual Intelligence';
+      case 'dashboard': return 'Workspace overview';
+      case 'search': return 'Upload a saree photo to find matching designs across notebooks';
+      case 'data-sources': return 'Connect and sync your OneNote notebooks';
+      case 'history': return 'Recent design searches and matches';
+      default: return 'Visual Saree Search';
     }
   };
 
@@ -35,7 +35,7 @@ export default function Navbar({ activeTab, setActiveTab, mobileNavOpen, setMobi
     <header className="top-header" id="top-navbar">
       <div className="header-left">
         {/* Hamburger Menu Toggle on Mobile */}
-        <button 
+        <button
           className="mobile-menu-toggle"
           onClick={() => setMobileNavOpen(!mobileNavOpen)}
           aria-label="Toggle Navigation Menu"
@@ -52,7 +52,7 @@ export default function Navbar({ activeTab, setActiveTab, mobileNavOpen, setMobi
       <div className="header-actions">
         {/* Microsoft OneNote Account Connection Pill */}
         {oneNoteStatus?.is_connected ? (
-          <div 
+          <div
             className="navbar-status-pill connected"
             onClick={() => setActiveTab('data-sources')}
             title="Microsoft OneNote Connected"
@@ -66,7 +66,7 @@ export default function Navbar({ activeTab, setActiveTab, mobileNavOpen, setMobi
             </span>
           </div>
         ) : (
-          <div 
+          <div
             className="navbar-status-pill disconnected"
             onClick={() => setActiveTab('data-sources')}
             title="Connect Microsoft OneNote"

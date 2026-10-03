@@ -1,4 +1,16 @@
-const API_BASE = '/api';
+const rawApiUrl = import.meta.env.VITE_API_URL;
+const API_BASE = rawApiUrl 
+  ? (rawApiUrl.endsWith('/api') ? rawApiUrl : `${rawApiUrl.replace(/\/$/, '')}/api`)
+  : '/api';
+
+export const resolveImageUrl = (url) => {
+  if (!url || typeof url !== 'string') return '';
+  if (url.startsWith('http://') || url.startsWith('https://') || url.startsWith('data:') || url.startsWith('blob:')) {
+    return url;
+  }
+  const backendBase = rawApiUrl ? rawApiUrl.replace(/\/api\/?$/, '').replace(/\/$/, '') : '';
+  return backendBase ? `${backendBase}${url.startsWith('/') ? '' : '/'}${url}` : url;
+};
 
 export const getCurrentUserId = () => {
   try {
@@ -164,7 +176,17 @@ export const api = {
       const err = await res.json().catch(() => ({}));
       throw new Error(err.detail || 'Search request failed');
     }
-    return res.json();
+    const data = await res.json();
+    if (data.query_image_url) data.query_image_url = resolveImageUrl(data.query_image_url);
+    if (data.query_structural_preview_url) data.query_structural_preview_url = resolveImageUrl(data.query_structural_preview_url);
+    if (Array.isArray(data.matches)) {
+      data.matches = data.matches.map(m => ({
+        ...m,
+        image_url: resolveImageUrl(m.image_url),
+        structural_preview_url: resolveImageUrl(m.structural_preview_url)
+      }));
+    }
+    return data;
   },
 
   // OneNote & Data Sources Status
@@ -261,7 +283,14 @@ export const api = {
     const res = await fetch(`${API_BASE}/designs?${query}`, {
       headers: getHeaders(),
     });
-    return res.json();
+    const data = await res.json();
+    if (data && Array.isArray(data.designs)) {
+      data.designs = data.designs.map(d => ({
+        ...d,
+        image_url: resolveImageUrl(d.image_url)
+      }));
+    }
+    return data;
   },
 
   clearAllDesigns: async () => {
@@ -277,7 +306,16 @@ export const api = {
     const res = await fetch(`${API_BASE}/history`, {
       headers: getHeaders(),
     });
-    return res.json();
+    const data = await res.json();
+    if (data && Array.isArray(data.history)) {
+      data.history = data.history.map(h => ({
+        ...h,
+        query_image_url: resolveImageUrl(h.query_image_url),
+        top_match_image_url: resolveImageUrl(h.top_match_image_url),
+        query_structural_preview_url: resolveImageUrl(h.query_structural_preview_url)
+      }));
+    }
+    return data;
   },
 
   clearSearchHistory: async () => {

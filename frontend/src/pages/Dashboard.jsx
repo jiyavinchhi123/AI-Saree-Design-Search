@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  Sparkles, 
-  BookOpen, 
-  FolderSearch, 
+import {
+  Sparkles,
+  BookOpen,
+  FolderSearch,
   ExternalLink,
   Cpu,
   Target,
@@ -30,35 +30,35 @@ export default function Dashboard({ setActiveTab }) {
     {
       num: '01',
       title: 'Connect OneNote',
-      desc: 'Link Microsoft account to scan textile design notebooks with read-only security.',
+      desc: 'Connect your Microsoft account to access your saree designs.',
       icon: BookOpen,
       action: () => setActiveTab('data-sources')
     },
     {
       num: '02',
       title: 'Upload Image',
-      desc: 'Drag & drop any saree fabric photo, swatch, pallu, or draft sketch.',
+      desc: 'Upload a saree photo, fabric sample, or design sketch.',
       icon: FolderSearch,
       action: () => setActiveTab('search')
     },
     {
       num: '03',
       title: 'AI Analysis',
-      desc: 'DINOv2 neural net extracts 1536-D motifs and borders, discarding fabric colors.',
+      desc: 'AI analyzes the design and looks for matching patterns.',
       icon: Cpu,
       action: () => setActiveTab('search')
     },
     {
       num: '04',
       title: 'Find Match',
-      desc: 'FAISS index instantly retrieves the exact matching historical design pattern.',
+      desc: 'Find the closest matching design from your OneNote collection.',
       icon: Target,
       action: () => setActiveTab('search')
     },
     {
       num: '05',
       title: 'Open in OneNote',
-      desc: 'One click launches OneNote Online directly focused on that exact page.',
+      desc: 'Open the matched design directly in OneNote.',
       icon: ExternalLink,
       action: () => setActiveTab('search')
     }
@@ -72,32 +72,32 @@ export default function Dashboard({ setActiveTab }) {
           <div className="hero-pill">
             <Sparkles size={14} /> Color-Invariant Computer Vision
           </div>
-          
+
           <h1 className="hero-title">AI Saree Design Search</h1>
           <div className="hero-tagline">Find. Reuse. Preserve.</div>
-          
+
           <p className="hero-desc">
-            Empower your saree manufacturing, weaving, and textile design teams to discover existing designs 
-            across Microsoft OneNote archives in seconds. Our deep vision model recognizes motifs, borders, 
+            Empower your saree manufacturing, weaving, and textile design teams to discover existing designs
+            across Microsoft OneNote archives in seconds. Our deep vision model recognizes motifs, borders,
             and layouts regardless of fabric colorways.
           </p>
 
           <div className="hero-action-buttons" style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
-            <button 
+            <button
               id="btn-quick-search"
-              className="btn-primary" 
+              className="btn-primary"
               onClick={() => setActiveTab('search')}
               style={{ padding: '10px 20px', fontSize: '0.88rem', fontWeight: 600 }}
             >
               <FolderSearch size={17} /> Search a Saree Design
             </button>
-            <button 
+            <button
               id="btn-quick-sources"
-              className="btn-secondary" 
+              className="btn-secondary"
               onClick={() => setActiveTab('data-sources')}
               style={{ padding: '10px 18px', fontSize: '0.88rem', fontWeight: 600 }}
             >
-              <BookOpen size={17} style={{ color: 'var(--primary-purple)' }} /> 
+              <BookOpen size={17} style={{ color: 'var(--primary-purple)' }} />
               {oneNoteStatus?.is_connected ? 'Manage OneNote Sync' : 'Connect Microsoft OneNote'}
             </button>
           </div>
@@ -119,8 +119,8 @@ export default function Dashboard({ setActiveTab }) {
           {workflowSteps.map((step, idx) => {
             const Icon = step.icon;
             return (
-              <div 
-                key={idx} 
+              <div
+                key={idx}
                 className="workflow-step-card"
                 onClick={step.action}
                 style={{ cursor: 'pointer' }}

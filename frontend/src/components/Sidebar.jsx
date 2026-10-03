@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  LayoutDashboard, 
-  Search, 
-  History, 
-  Layers, 
-  Sparkles, 
+import {
+  LayoutDashboard,
+  Search,
+  History,
+  Layers,
+  Sparkles,
   X,
   BookOpen
 } from 'lucide-react';
@@ -36,8 +36,8 @@ export default function Sidebar({ activeTab, setActiveTab, mobileNavOpen, setMob
   ];
 
   return (
-    <aside 
-      className={`app-sidebar ${mobileNavOpen ? 'mobile-open' : ''}`} 
+    <aside
+      className={`app-sidebar ${mobileNavOpen ? 'mobile-open' : ''}`}
       id="main-sidebar"
     >
       {/* Brand Header */}
@@ -52,7 +52,7 @@ export default function Sidebar({ activeTab, setActiveTab, mobileNavOpen, setMob
 
         {/* Close Button on Mobile Drawer */}
         {setMobileNavOpen && (
-          <button 
+          <button
             className="mobile-close-btn"
             onClick={() => setMobileNavOpen(false)}
             aria-label="Close Navigation Menu"
@@ -85,8 +85,8 @@ export default function Sidebar({ activeTab, setActiveTab, mobileNavOpen, setMob
       </nav>
 
       {/* OneNote Status Card */}
-      <div 
-        className="sidebar-onenote-badge" 
+      <div
+        className="sidebar-onenote-badge"
         id="onenote-status-badge"
         onClick={() => {
           setActiveTab('data-sources');
@@ -106,7 +106,7 @@ export default function Sidebar({ activeTab, setActiveTab, mobileNavOpen, setMob
         <div className="badge-status">
           <div className={`status-dot ${oneNoteStatus?.is_connected ? '' : 'inactive'}`} />
           <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            {oneNoteStatus?.is_connected 
+            {oneNoteStatus?.is_connected
               ? (oneNoteStatus.display_name || oneNoteStatus.user_email || 'Connected')
               : 'Not Connected'}
           </span>

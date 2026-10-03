@@ -98,10 +98,10 @@ export default function SearchHistory() {
       }}>
         <div>
           <h2 style={{ fontSize: '1.45rem', color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <History size={24} style={{ color: 'var(--primary-purple)' }} /> Visual Search History &amp; Audits
+            <History size={24} style={{ color: 'var(--primary-purple)' }} /> Search History
           </h2>
           <p style={{ color: 'var(--text-muted)', fontSize: '0.86rem', marginTop: '2px' }}>
-            Audit log of all uploaded saree design queries, similarity scores, and mapped OneNote records.
+            Recent saree design searches.
           </p>
         </div>
 
@@ -131,7 +131,7 @@ export default function SearchHistory() {
             <Search size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-dim)' }} />
             <input 
               type="text"
-              placeholder="Search by design title, notebook, section..."
+              placeholder="Search history..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               style={{
@@ -196,10 +196,10 @@ export default function SearchHistory() {
           <table className="data-table" id="search-history-table">
             <thead>
               <tr>
-                <th>Timestamp</th>
-                <th>Query Image</th>
-                <th>Top Matched OneNote Design</th>
-                <th>Confidence</th>
+                <th>Date</th>
+                <th>Query</th>
+                <th>Top Match</th>
+                <th>Match</th>
                 <th>Status</th>
                 <th>Action</th>
               </tr>
@@ -259,12 +259,12 @@ export default function SearchHistory() {
                       </div>
                     ) : (
                       <span style={{ color: 'var(--text-dim)', fontStyle: 'italic', fontSize: '0.82rem' }}>
-                        No Match Identified
+                        No Match
                       </span>
                     )}
                   </td>
 
-                  <td data-label="Confidence">
+                  <td data-label="Match">
                     <span style={{ 
                       fontWeight: 800, 
                       fontSize: '0.88rem',
@@ -303,7 +303,7 @@ export default function SearchHistory() {
                         padding: '3px 8px', 
                         borderRadius: 'var(--radius-sm)' 
                       }}>
-                        <AlertCircle size={13} /> No Strong Match
+                        <AlertCircle size={13} /> No Match
                       </span>
                     )}
                   </td>
@@ -317,9 +317,9 @@ export default function SearchHistory() {
                           rel="noopener noreferrer" 
                           className="btn-onenote"
                           style={{ padding: '6px 12px', fontSize: '0.75rem' }}
-                          title="Open Exact Match in OneNote"
+                          title="Open in OneNote"
                         >
-                          <ExternalLink size={12} /> Open Exact Match in OneNote
+                          <ExternalLink size={12} /> Open in OneNote
                         </a>
                       </div>
                     ) : (
@@ -340,7 +340,7 @@ export default function SearchHistory() {
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '18px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                 <Target size={20} style={{ color: 'var(--primary-purple)' }} />
-                <h3 style={{ fontSize: '1.2rem', color: 'var(--text-main)', margin: 0 }}>Search Audit Details</h3>
+                <h3 style={{ fontSize: '1.2rem', color: 'var(--text-main)', margin: 0 }}>Search Details</h3>
               </div>
               <button 
                 onClick={() => setSelectedItem(null)} 
@@ -353,7 +353,7 @@ export default function SearchHistory() {
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '20px' }}>
               <div>
                 <div style={{ fontSize: '0.80rem', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: '6px' }}>
-                  Uploaded Saree Query
+                  Uploaded Image
                 </div>
                 <div style={{ borderRadius: 'var(--radius-md)', overflow: 'hidden', border: '1px solid var(--border-subtle)', aspectRatio: '1' }}>
                   <img src={selectedItem.query_image_url} alt="Query Saree" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
@@ -362,7 +362,7 @@ export default function SearchHistory() {
 
               <div>
                 <div style={{ fontSize: '0.80rem', fontWeight: 700, color: 'var(--primary-purple)', marginBottom: '6px' }}>
-                  Top Matched OneNote Design
+                  Matched Design
                 </div>
                 <div style={{ borderRadius: 'var(--radius-md)', overflow: 'hidden', border: '2px solid var(--primary-purple)', aspectRatio: '1', background: '#f8fafc' }}>
                   {selectedItem.top_match_image_url ? (
@@ -378,7 +378,7 @@ export default function SearchHistory() {
 
             {/* Location Breadcrumb */}
             <div style={{ marginBottom: '16px' }}>
-              <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginBottom: '6px', fontWeight: 600 }}>OneNote Verified Hierarchy:</div>
+              <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginBottom: '6px', fontWeight: 600 }}>Location:</div>
               <OneNoteBreadcrumb 
                 notebook={selectedItem.notebook_name} 
                 section={selectedItem.section_name} 
@@ -399,12 +399,9 @@ export default function SearchHistory() {
               flexDirection: 'column',
               gap: '6px'
             }}>
-              <div><strong>Audit ID:</strong> <code>{selectedItem.id}</code></div>
-              <div><strong>Similarity Score:</strong> <strong style={{ color: 'var(--primary-purple)' }}>{selectedItem.similarity_percentage}%</strong></div>
-              <div><strong>Timestamp:</strong> {formatTime(selectedItem.timestamp)}</div>
-              {selectedItem.top_match_object_id && (
-                <div><strong>OneNote Object ID:</strong> <code>{selectedItem.top_match_object_id}</code></div>
-              )}
+              <div><strong>Search ID:</strong> <code>{selectedItem.id}</code></div>
+              <div><strong>Match:</strong> <strong style={{ color: 'var(--primary-purple)' }}>{selectedItem.similarity_percentage}%</strong></div>
+              <div><strong>Date:</strong> {formatTime(selectedItem.timestamp)}</div>
             </div>
 
             <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end', flexWrap: 'wrap' }}>
@@ -416,11 +413,11 @@ export default function SearchHistory() {
                       isOpen: true,
                       originalUrl: selectedItem.query_image_url,
                       structuralUrl: selectedItem.query_structural_preview_url,
-                      title: 'Query Saree Structural Map'
+                      title: 'Uploaded Saree - Pattern Map'
                     });
                   }}
                 >
-                  <Eye size={14} /> AI Vision Tensor
+                  <Eye size={14} /> Pattern Map
                 </button>
               )}
 
@@ -431,7 +428,7 @@ export default function SearchHistory() {
                   rel="noopener noreferrer"
                   className="btn-primary"
                 >
-                  <ExternalLink size={14} /> Open Exact Match in OneNote
+                  <ExternalLink size={14} /> Open in OneNote
                 </a>
               )}
             </div>

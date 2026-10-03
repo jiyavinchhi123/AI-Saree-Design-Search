@@ -247,10 +247,10 @@ export default function DataSources() {
         </div>
         <div style={{ flex: 1 }}>
           <h4 style={{ fontSize: '1.05rem', color: 'var(--text-main)', marginBottom: '4px' }}>
-            Enterprise Read-Only Security Assurance
+            Read-Only Access
           </h4>
           <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', lineHeight: '1.5' }}>
-            The AI Saree Design Search engine only requests <code style={{ background: 'var(--purple-light)', color: 'var(--primary-purple)', padding: '2px 6px', borderRadius: '4px' }}>Notes.Read</code> and <code style={{ background: 'var(--purple-light)', color: 'var(--primary-purple)', padding: '2px 6px', borderRadius: '4px' }}>User.Read</code> permissions from Microsoft Graph. Your original OneNote notebooks, sections, and pages are <strong>never modified, edited, or deleted</strong>. All image embeddings are stored securely in your private tenant index.
+            Your OneNote notebooks, sections, and pages are <strong>never modified or deleted</strong>. The app only reads image designs.
           </p>
         </div>
       </div>
@@ -281,7 +281,7 @@ export default function DataSources() {
               </div>
               <div>
                 <h3 style={{ fontSize: '1.15rem', color: 'var(--text-main)' }}>Microsoft OneNote</h3>
-                <p style={{ fontSize: '0.80rem', color: 'var(--text-muted)' }}>Graph API OAuth 2.0 Integration</p>
+                <p style={{ fontSize: '0.80rem', color: 'var(--text-muted)' }}>Account Status</p>
               </div>
             </div>
 
@@ -339,7 +339,7 @@ export default function DataSources() {
                   style={{ flex: 1, minWidth: '160px' }}
                 >
                   <RefreshCw size={16} className={isSyncing ? 'spinner' : ''} />
-                  <span>{isSyncing ? 'Syncing Pages...' : 'Sync Notebooks'}</span>
+                  <span>{isSyncing ? 'Syncing...' : 'Sync Notebooks'}</span>
                 </button>
                 <button 
                   id="btn-disconnect-onenote"
@@ -354,7 +354,7 @@ export default function DataSources() {
           ) : (
             <div>
               <p style={{ fontSize: '0.88rem', color: 'var(--text-secondary)', lineHeight: '1.6', marginBottom: '22px' }}>
-                Sign in with any personal or work Microsoft account to automatically index saree designs from your digital OneNote notebooks.
+                Sign in to automatically index saree designs from your OneNote notebooks.
               </p>
 
               <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
@@ -364,13 +364,12 @@ export default function DataSources() {
                   onClick={handleDirectOAuthLogin}
                   style={{ flex: 1, minWidth: '180px' }}
                 >
-                  <BookOpen size={16} /> Connect Microsoft OneNote
+                  <BookOpen size={16} /> Connect OneNote
                 </button>
                 <button 
                   id="btn-device-login"
                   className="btn-secondary" 
                   onClick={handleStartDeviceLogin}
-                  title="Alternative 1-click device login for corporate or restricted environments"
                 >
                   <KeyRound size={15} /> Device Code
                 </button>
@@ -382,27 +381,27 @@ export default function DataSources() {
         {/* Sync Summary & Health Card */}
         <div className="saas-card" id="card-sync-summary">
           <h3 style={{ fontSize: '1.15rem', color: 'var(--text-main)', marginBottom: '8px' }}>
-            Synchronization Summary
+            Sync Summary
           </h3>
           <p style={{ fontSize: '0.82rem', color: 'var(--text-muted)', marginBottom: '20px' }}>
-            Visual index metrics across connected OneNote sections and pages.
+            Overview of indexed notebooks and designs.
           </p>
 
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '14px', marginBottom: '20px' }}>
             <div style={{ background: 'var(--bg-subtle)', padding: '14px', borderRadius: 'var(--radius-md)' }}>
-              <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)', fontWeight: 600 }}>CLOUD DESIGNS</div>
+              <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)', fontWeight: 600 }}>DESIGNS</div>
               <div style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--primary-purple)', marginTop: '4px' }}>
                 {oneNoteStatus?.indexed_designs_count ?? 0}
               </div>
             </div>
             <div style={{ background: 'var(--bg-subtle)', padding: '14px', borderRadius: 'var(--radius-md)' }}>
-              <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)', fontWeight: 600 }}>CLOUD NOTEBOOKS</div>
+              <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)', fontWeight: 600 }}>NOTEBOOKS</div>
               <div style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--gold-primary)', marginTop: '4px' }}>
                 {oneNoteStatus?.notebooks_count ?? notebooks.length ?? 0}
               </div>
             </div>
             <div style={{ background: 'var(--bg-subtle)', padding: '14px', borderRadius: 'var(--radius-md)' }}>
-              <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)', fontWeight: 600 }}>CLOUD SECTIONS</div>
+              <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)', fontWeight: 600 }}>SECTIONS</div>
               <div style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--accent-emerald)', marginTop: '4px' }}>
                 {notebooks.reduce((acc, nb) => acc + (nb.sectionsCount || (nb.sections ? nb.sections.length : 0)), 0)}
               </div>
@@ -412,7 +411,7 @@ export default function DataSources() {
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '0.80rem', color: 'var(--text-muted)' }}>
             <Clock size={16} style={{ color: 'var(--text-dim)' }} />
             <span>
-              Last cloud synchronization: <strong>{oneNoteStatus?.last_synced ? new Date(oneNoteStatus.last_synced).toLocaleString() : 'Not synchronized yet'}</strong>
+              Last synced: <strong>{oneNoteStatus?.last_synced ? new Date(oneNoteStatus.last_synced).toLocaleString() : 'Not synced yet'}</strong>
             </span>
           </div>
         </div>
@@ -555,7 +554,7 @@ export default function DataSources() {
                   <th>Design Title</th>
                   <th>OneNote Location</th>
                   <th>Category</th>
-                  <th>Exact Coordinates</th>
+                  <th>Position</th>
                   <th>Action</th>
                 </tr>
               </thead>
@@ -592,7 +591,7 @@ export default function DataSources() {
                         {item.category || 'Traditional'}
                       </span>
                     </td>
-                    <td data-label="Exact Coordinates">
+                    <td data-label="Position">
                       <span className="exact-image-badge">
                         Image #{item.image_order || 1} on page
                       </span>
@@ -604,9 +603,9 @@ export default function DataSources() {
                         rel="noopener noreferrer"
                         className="btn-onenote"
                         style={{ padding: '6px 12px', fontSize: '0.76rem' }}
-                        title="Open Exact Match in OneNote"
+                        title="Open in OneNote"
                       >
-                        <ExternalLink size={12} /> Open Exact Match in OneNote
+                        <ExternalLink size={12} /> Open in OneNote
                       </a>
                     </td>
                   </tr>
