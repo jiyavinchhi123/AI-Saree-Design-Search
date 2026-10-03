@@ -107,7 +107,7 @@ export default function App() {
         {/* App Footer */}
         <footer className="app-footer" id="app-footer">
           <p className="app-footer-text">
-            &copy; 2026 AI Saree Search | Developed by <strong>Jiya Vinchhi</strong>
+            &copy; 2026 AI Saree Search | Developed by <strong className="app-footer-author">Jiya Vinchhi</strong>
           </p>
         </footer>
       </div>

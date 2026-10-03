@@ -53,46 +53,22 @@ export default function Navbar({ activeTab, setActiveTab, mobileNavOpen, setMobi
         {/* Microsoft OneNote Account Connection Pill */}
         {oneNoteStatus?.is_connected ? (
           <div 
+            className="navbar-status-pill connected"
             onClick={() => setActiveTab('data-sources')}
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '8px',
-              background: 'var(--emerald-light)',
-              border: '1px solid var(--emerald-border)',
-              borderRadius: 'var(--radius-full)',
-              padding: '6px 14px',
-              fontSize: '0.80rem',
-              color: 'var(--accent-emerald)',
-              fontWeight: 600,
-              cursor: 'pointer'
-            }}
             title="Microsoft OneNote Connected"
           >
-            <CheckCircle2 size={14} style={{ color: 'var(--accent-emerald)' }} />
-            <span style={{ maxWidth: '140px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            <CheckCircle2 size={14} style={{ color: 'var(--accent-emerald)', flexShrink: 0 }} />
+            <span className="navbar-pill-username">
               {oneNoteStatus.display_name || oneNoteStatus.user_email}
             </span>
-            <span style={{ fontSize: '0.74rem', opacity: 0.8, color: '#047857' }}>
+            <span className="navbar-pill-count">
               • {oneNoteStatus.indexed_designs_count} designs
             </span>
           </div>
         ) : (
           <div 
+            className="navbar-status-pill disconnected"
             onClick={() => setActiveTab('data-sources')}
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '6px',
-              background: 'var(--purple-light)',
-              border: '1px solid var(--purple-border)',
-              borderRadius: 'var(--radius-full)',
-              padding: '6px 14px',
-              fontSize: '0.80rem',
-              color: 'var(--primary-purple)',
-              fontWeight: 600,
-              cursor: 'pointer'
-            }}
             title="Connect Microsoft OneNote"
           >
             <BookOpen size={14} />
@@ -101,18 +77,7 @@ export default function Navbar({ activeTab, setActiveTab, mobileNavOpen, setMobi
         )}
 
         {/* AI Engine Status Pill */}
-        <div style={{
-          display: 'inline-flex',
-          alignItems: 'center',
-          gap: '7px',
-          background: 'var(--gold-light)',
-          border: '1px solid var(--gold-border)',
-          borderRadius: 'var(--radius-full)',
-          padding: '6px 14px',
-          fontSize: '0.78rem',
-          color: 'var(--gold-text)',
-          fontWeight: 700
-        }}>
+        <div className="navbar-engine-pill">
           <Sparkles size={14} style={{ color: 'var(--gold-primary)' }} />
           <span>Color-Invariant AI</span>
         </div>

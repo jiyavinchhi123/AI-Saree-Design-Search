@@ -55,13 +55,7 @@ export default function Sidebar({ activeTab, setActiveTab, mobileNavOpen, setMob
           <button 
             className="mobile-close-btn"
             onClick={() => setMobileNavOpen(false)}
-            aria-label="Close Navigation"
-            style={{
-              display: 'none',
-              background: 'transparent',
-              color: 'var(--text-muted)',
-              padding: '6px'
-            }}
+            aria-label="Close Navigation Menu"
           >
             <X size={20} />
           </button>
@@ -78,7 +72,10 @@ export default function Sidebar({ activeTab, setActiveTab, mobileNavOpen, setMob
               key={item.id}
               id={`nav-${item.id}`}
               className={`nav-item ${isActive ? 'active' : ''}`}
-              onClick={() => setActiveTab(item.id)}
+              onClick={() => {
+                setActiveTab(item.id);
+                if (setMobileNavOpen) setMobileNavOpen(false);
+              }}
             >
               <Icon size={19} />
               <span>{item.label}</span>
@@ -91,7 +88,10 @@ export default function Sidebar({ activeTab, setActiveTab, mobileNavOpen, setMob
       <div 
         className="sidebar-onenote-badge" 
         id="onenote-status-badge"
-        onClick={() => setActiveTab('data-sources')}
+        onClick={() => {
+          setActiveTab('data-sources');
+          if (setMobileNavOpen) setMobileNavOpen(false);
+        }}
         style={{ cursor: 'pointer' }}
         title="View Microsoft OneNote Integration & Sync Details"
       >

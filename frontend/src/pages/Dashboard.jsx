@@ -82,7 +82,7 @@ export default function Dashboard({ setActiveTab }) {
             and layouts regardless of fabric colorways.
           </p>
 
-          <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+          <div className="hero-action-buttons" style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
             <button 
               id="btn-quick-search"
               className="btn-primary" 

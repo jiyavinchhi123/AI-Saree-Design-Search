@@ -259,7 +259,7 @@ export default function SearchDesign() {
         </div>
 
         {/* Action Controls & Threshold Slider */}
-        <div style={{ 
+        <div className="search-controls-bar" style={{ 
           marginTop: '24px', 
           display: 'flex', 
           alignItems: 'center', 
@@ -270,10 +270,10 @@ export default function SearchDesign() {
           borderTop: '1px solid var(--border-subtle)'
         }}>
           {/* Threshold Slider */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
-            <Sliders size={18} style={{ color: 'var(--primary-purple)' }} />
-            <div>
-              <div style={{ fontSize: '0.84rem', color: 'var(--text-secondary)', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <div className="threshold-slider-group" style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+            <Sliders size={18} style={{ color: 'var(--primary-purple)', flexShrink: 0 }} />
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: '0.84rem', color: 'var(--text-secondary)', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                 <span>Match Confidence Threshold:</span>
                 <span style={{ 
                   background: 'var(--purple-light)', 
@@ -295,13 +295,14 @@ export default function SearchDesign() {
                 step="0.01" 
                 value={threshold} 
                 onChange={(e) => setThreshold(parseFloat(e.target.value))}
+                className="threshold-slider-input"
                 style={{ width: '200px', accentColor: 'var(--primary-purple)', cursor: 'pointer', marginTop: '6px' }}
               />
             </div>
           </div>
 
           {/* Action Buttons */}
-          <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+          <div className="search-action-btns" style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
             {previewUrl && (
               <button 
                 className="btn-secondary" 

@@ -119,7 +119,7 @@ export default function SearchHistory() {
 
       {/* Filter and Search Bar */}
       <div className="saas-card" style={{ padding: '16px 20px', marginBottom: '24px' }}>
-        <div style={{ 
+        <div className="history-filter-controls" style={{ 
           display: 'flex', 
           alignItems: 'center', 
           justifyContent: 'space-between', 
@@ -127,7 +127,7 @@ export default function SearchHistory() {
           gap: '14px' 
         }}>
           {/* Search Box */}
-          <div style={{ position: 'relative', flex: 1, minWidth: '220px', maxWidth: '420px' }}>
+          <div className="history-search-box" style={{ position: 'relative', flex: 1, minWidth: '220px', maxWidth: '420px' }}>
             <Search size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-dim)' }} />
             <input 
               type="text"
