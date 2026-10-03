@@ -36,7 +36,12 @@ async def get_search_history(
             "top_match_page_id": r.top_match_page_id,
             "top_match_object_id": r.top_match_object_id,
             "top_match_object_url": r.top_match_object_url,
-            "onenote_web_url": r.onenote_web_url or r.top_match_object_url
+            "top_match_page_web_url": getattr(r, "top_match_page_web_url", None) or r.onenote_web_url,
+            "page_web_url": getattr(r, "top_match_page_web_url", None) or r.onenote_web_url,
+            "object_web_url": r.top_match_object_url,
+            "oneNoteWebUrl": getattr(r, "top_match_page_web_url", None) or r.onenote_web_url,
+            "onenote_web_url": getattr(r, "top_match_page_web_url", None) or r.onenote_web_url,
+            "client_url": getattr(r, "top_match_page_web_url", None) or r.onenote_web_url
         })
     return {"total": len(history_list), "history": history_list}
 

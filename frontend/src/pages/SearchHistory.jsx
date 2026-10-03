@@ -13,7 +13,7 @@ import {
   Target,
   BookOpen
 } from 'lucide-react';
-import { api, getCleanOneNoteUrl } from '../services/api';
+import { api, getExactPageWebUrl, getCleanOneNoteUrl } from '../services/api';
 import OneNoteBreadcrumb from '../components/OneNoteBreadcrumb';
 import StructuralMapModal from '../components/StructuralMapModal';
 
@@ -312,14 +312,14 @@ export default function SearchHistory() {
                     {item.top_match_id ? (
                       <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
                         <a 
-                          href={item.top_match_object_url || item.onenote_web_url || getCleanOneNoteUrl(item)} 
+                          href={getExactPageWebUrl(item) || 'https://www.onenote.com/notebooks'} 
                           target="_blank" 
                           rel="noopener noreferrer" 
                           className="btn-onenote"
                           style={{ padding: '6px 12px', fontSize: '0.75rem' }}
-                          title={`Open exact matched image in OneNote (Object: ${item.top_match_object_id || 'Page'})`}
+                          title="Open Exact Match in OneNote"
                         >
-                          <ExternalLink size={12} /> Exact Match
+                          <ExternalLink size={12} /> Open Exact Match in OneNote
                         </a>
                       </div>
                     ) : (
@@ -384,6 +384,8 @@ export default function SearchHistory() {
                 section={selectedItem.section_name} 
                 page={selectedItem.page_title || selectedItem.top_match_title} 
                 imageOrder={selectedItem.top_match_order}
+                item={selectedItem}
+                copyUrl={getExactPageWebUrl(selectedItem)}
               />
             </div>
 
@@ -424,7 +426,7 @@ export default function SearchHistory() {
 
               {selectedItem.top_match_id && (
                 <a 
-                  href={selectedItem.top_match_object_url || selectedItem.onenote_web_url || getCleanOneNoteUrl(selectedItem)}
+                  href={getExactPageWebUrl(selectedItem) || 'https://www.onenote.com/notebooks'}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="btn-primary"

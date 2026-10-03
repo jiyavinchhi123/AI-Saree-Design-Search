@@ -589,7 +589,9 @@ async def open_design_in_onenote(
                 "object_id": rec.object_id,
                 "object_client_url": rec.object_client_url,
                 "object_web_url": rec.object_web_url,
-                "onenote_web_url": rec.onenote_web_url,
+                "onenote_web_url": rec.page_web_url or rec.onenote_web_url,
+                "page_web_url": rec.page_web_url or rec.onenote_web_url,
+                "oneNoteWebUrl": rec.page_web_url or rec.onenote_web_url,
                 "onenote_client_url": rec.onenote_client_url,
                 "image_url": rec.image_url
             }
@@ -624,40 +626,44 @@ async def open_design_in_onenote(
                 raise HTTPException(status_code=500, detail=f"Failed to open explorer: {e}")
         raise HTTPException(status_code=404, detail="Local file could not be located on disk")
 
-    # Mode: OneNote Desktop Client Deep Link (Exact Object Location)
-    from app.onenote.link_builder import get_exact_image_hyperlinks
-    exact_links = get_exact_image_hyperlinks(design)
+    # Mode: Direct Stored Location Retrieval (Single Source of Truth - Page Level Navigation)
+    raw_page_url = design.get("page_web_url") or design.get("oneNoteWebUrl") or design.get("onenote_web_url")
+    if not raw_page_url or not raw_page_url.startswith("https://"):
+        raise HTTPException(status_code=404, detail="Page-specific OneNote HTTPS URL not found for this design")
+    final_target = raw_page_url
 
     if mode in ("desktop", "app"):
-        exact_client_url = exact_links["client_url"]
-        print(f"[OneNote OpenExactMatch] Final generated desktop deep link for design {design_id}: {exact_client_url}", flush=True)
+        print(f"[OneNote Open] Dispatched stored URL for design {design_id}: {final_target}", flush=True)
 
         if redirect:
-            return RedirectResponse(url=exact_client_url, status_code=302)
+            return RedirectResponse(url=final_target, status_code=302)
 
         return {
             "status": "success",
-            "message": f"Opened exact matched image in OneNote: {nb_name} > {sec_name} > {display_title}",
+            "message": f"Opened match in OneNote: {nb_name} > {sec_name} > {display_title}",
             "design_id": design_id,
+            "image_id": design_id,
             "title": display_title,
             "notebook_name": nb_name,
             "section_name": sec_name,
             "page_title": design.get("page_title") or display_title,
-            "client_url": exact_client_url,
-            "web_url": exact_links["object_web_url"] or exact_links["fallback_web_url"],
-            "fallback_client_url": exact_links["fallback_client_url"],
-            "fallback_web_url": exact_links["fallback_web_url"],
-            "page_id": exact_links["page_id"],
-            "object_id": exact_links["object_id"],
-            "image_order": exact_links["image_order"],
-            "image_position": exact_links["image_position"],
-            "resource_id": exact_links["resource_id"],
+            "client_url": final_target,
+            "web_url": target_web_url,
+            "page_web_url": target_web_url,
+            "oneNoteWebUrl": target_web_url,
+            "onenote_web_url": target_web_url,
+            "object_web_url": design.get("object_web_url"),
+            "oneNoteClientUrl": design.get("object_client_url"),
+            "onenote_client_url": design.get("object_client_url"),
+            "fallback_client_url": None,
+            "fallback_web_url": target_web_url,
+            "page_id": design.get("page_id"),
+            "object_id": design.get("object_id"),
+            "image_order": design.get("image_order", 1),
+            "image_position": design.get("image_position", "Image #1 on page"),
+            "resource_id": design.get("resource_id"),
             "resource_url": design.get("resource_url"),
-            "hierarchy": f"{nb_name} > {sec_name} > {display_title} > Image #{exact_links['image_order']}",
-            "object_client_url": exact_links["object_client_url"],
-            "object_web_url": exact_links["object_web_url"],
-            "onenote_client_url": exact_client_url,
-            "onenote_web_url": exact_links["object_web_url"] or exact_links["fallback_web_url"],
+            "hierarchy": f"{nb_name} > {sec_name} > {display_title} > Image #{design.get('image_order', 1)}",
             "image_url": img_url
         }
 
@@ -666,29 +672,32 @@ async def open_design_in_onenote(
         return {
             "status": "success",
             "design_id": design_id,
+            "image_id": design_id,
             "title": display_title,
             "notebook_name": nb_name,
             "section_name": sec_name,
             "page_title": design.get("page_title") or display_title,
-            "image_order": exact_links["image_order"],
-            "image_position": exact_links["image_position"],
-            "resource_id": exact_links["resource_id"],
+            "image_order": design.get("image_order", 1),
+            "image_position": design.get("image_position", "Image #1 on page"),
+            "resource_id": design.get("resource_id"),
             "resource_url": design.get("resource_url"),
-            "object_id": exact_links["object_id"],
-            "page_id": exact_links["page_id"],
-            "hierarchy": f"{nb_name} > {sec_name} > {display_title} > Image #{exact_links['image_order']}",
-            "object_client_url": exact_links["object_client_url"],
-            "object_web_url": exact_links["object_web_url"],
-            "client_url": exact_links["object_client_url"],
-            "onenote_web_url": exact_links["object_web_url"],
-            "onenote_client_url": exact_links["object_client_url"],
-            "fallback_client_url": exact_links["fallback_client_url"],
-            "fallback_web_url": exact_links["fallback_web_url"],
+            "object_id": design.get("object_id"),
+            "page_id": design.get("page_id"),
+            "hierarchy": f"{nb_name} > {sec_name} > {display_title} > Image #{design.get('image_order', 1)}",
+            "client_url": final_target,
+            "web_url": target_web_url,
+            "page_web_url": target_web_url,
+            "oneNoteWebUrl": target_web_url,
+            "onenote_web_url": target_web_url,
+            "object_web_url": design.get("object_web_url"),
+            "oneNoteClientUrl": design.get("object_client_url"),
+            "onenote_client_url": design.get("object_client_url"),
+            "fallback_client_url": None,
+            "fallback_web_url": target_web_url,
             "image_url": img_url
         }
 
-    # Mode: Web Redirection (Exact Object Location with Page Fallback)
-    target_web_url = exact_links["object_web_url"] or exact_links["fallback_web_url"]
+    # Mode: Web Redirection
     if target_web_url and (target_web_url.startswith("https://") or target_web_url.startswith("http://")):
         return RedirectResponse(url=target_web_url, status_code=302)
 

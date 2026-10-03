@@ -20,7 +20,7 @@ import {
   KeyRound,
   X
 } from 'lucide-react';
-import { api, getCleanOneNoteUrl } from '../services/api';
+import { api, getExactPageWebUrl, getCleanOneNoteUrl } from '../services/api';
 import OneNoteBreadcrumb from '../components/OneNoteBreadcrumb';
 
 export default function DataSources() {
@@ -388,17 +388,23 @@ export default function DataSources() {
             Visual index metrics across connected OneNote sections and pages.
           </p>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', marginBottom: '20px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '14px', marginBottom: '20px' }}>
             <div style={{ background: 'var(--bg-subtle)', padding: '14px', borderRadius: 'var(--radius-md)' }}>
-              <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)', fontWeight: 600 }}>INDEXED DESIGNS</div>
+              <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)', fontWeight: 600 }}>CLOUD DESIGNS</div>
               <div style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--primary-purple)', marginTop: '4px' }}>
-                {oneNoteStatus?.indexed_designs_count || designs.length}
+                {oneNoteStatus?.indexed_designs_count ?? 0}
               </div>
             </div>
             <div style={{ background: 'var(--bg-subtle)', padding: '14px', borderRadius: 'var(--radius-md)' }}>
-              <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)', fontWeight: 600 }}>NOTEBOOKS</div>
+              <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)', fontWeight: 600 }}>CLOUD NOTEBOOKS</div>
               <div style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--gold-primary)', marginTop: '4px' }}>
-                {notebooks.length || (oneNoteStatus?.notebooks_count || 1)}
+                {oneNoteStatus?.notebooks_count ?? notebooks.length ?? 0}
+              </div>
+            </div>
+            <div style={{ background: 'var(--bg-subtle)', padding: '14px', borderRadius: 'var(--radius-md)' }}>
+              <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)', fontWeight: 600 }}>CLOUD SECTIONS</div>
+              <div style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--accent-emerald)', marginTop: '4px' }}>
+                {notebooks.reduce((acc, nb) => acc + (nb.sectionsCount || (nb.sections ? nb.sections.length : 0)), 0)}
               </div>
             </div>
           </div>
@@ -406,7 +412,7 @@ export default function DataSources() {
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '0.80rem', color: 'var(--text-muted)' }}>
             <Clock size={16} style={{ color: 'var(--text-dim)' }} />
             <span>
-              Last synchronized: <strong>{oneNoteStatus?.last_synced || 'Just now (Live Catalog Active)'}</strong>
+              Last cloud synchronization: <strong>{oneNoteStatus?.last_synced ? new Date(oneNoteStatus.last_synced).toLocaleString() : 'Not synchronized yet'}</strong>
             </span>
           </div>
         </div>
@@ -593,14 +599,14 @@ export default function DataSources() {
                     </td>
                     <td data-label="Action">
                       <a 
-                        href={item.object_client_url || item.object_web_url || getCleanOneNoteUrl(item)}
+                        href={getExactPageWebUrl(item) || 'https://www.onenote.com/notebooks'}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="btn-onenote"
                         style={{ padding: '6px 12px', fontSize: '0.76rem' }}
-                        title="Open exact image in OneNote"
+                        title="Open Exact Match in OneNote"
                       >
-                        <ExternalLink size={12} /> Open in OneNote
+                        <ExternalLink size={12} /> Open Exact Match in OneNote
                       </a>
                     </td>
                   </tr>

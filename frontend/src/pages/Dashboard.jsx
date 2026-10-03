@@ -14,7 +14,7 @@ import {
   ArrowUpRight,
   ShieldCheck
 } from 'lucide-react';
-import { api, getCleanOneNoteUrl } from '../services/api';
+import { api, getExactPageWebUrl, getCleanOneNoteUrl } from '../services/api';
 import OneNoteBreadcrumb from '../components/OneNoteBreadcrumb';
 
 export default function Dashboard({ setActiveTab }) {
@@ -149,8 +149,8 @@ export default function Dashboard({ setActiveTab }) {
             <Layers size={26} />
           </div>
           <div>
-            <div className="kpi-val">{stats.totalDesigns}</div>
-            <div className="kpi-label">Designs Indexed</div>
+            <div className="kpi-val">{oneNoteStatus?.indexed_designs_count ?? stats.totalDesigns ?? 0}</div>
+            <div className="kpi-label">Cloud Designs Indexed</div>
           </div>
         </div>
 
@@ -159,7 +159,7 @@ export default function Dashboard({ setActiveTab }) {
             <BookOpen size={26} />
           </div>
           <div>
-            <div className="kpi-val">{stats.notebooks || (oneNoteStatus?.notebooks_count || 1)}</div>
+            <div className="kpi-val">{oneNoteStatus?.notebooks_count ?? stats.notebooks ?? 0}</div>
             <div className="kpi-label">Connected Notebooks</div>
           </div>
         </div>
@@ -350,14 +350,14 @@ export default function Dashboard({ setActiveTab }) {
                   </div>
 
                   <a 
-                    href={item.top_match_object_url || item.onenote_web_url || getCleanOneNoteUrl(item)}
+                    href={getExactPageWebUrl(item) || 'https://www.onenote.com/notebooks'}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="btn-onenote"
                     style={{ padding: '5px 9px', fontSize: '0.72rem', flexShrink: 0 }}
-                    title="Open exact matched image in OneNote"
+                    title="Open Exact Match in OneNote"
                   >
-                    <ExternalLink size={12} /> Open
+                    <ExternalLink size={12} /> Open Exact Match in OneNote
                   </a>
                 </div>
               ))}
@@ -414,6 +414,8 @@ export default function Dashboard({ setActiveTab }) {
                     section={design.section_name} 
                     page={design.page_title} 
                     imageOrder={design.image_order}
+                    item={design}
+                    copyUrl={getExactPageWebUrl(design)}
                   />
                   
                   {design.colorway && (
@@ -433,13 +435,13 @@ export default function Dashboard({ setActiveTab }) {
                       ID: {design.design_id}
                     </span>
                     <a 
-                      href={getCleanOneNoteUrl(design)} 
+                      href={getExactPageWebUrl(design) || 'https://www.onenote.com/notebooks'} 
                       target="_blank" 
                       rel="noopener noreferrer"
                       className="btn-onenote"
-                      title="Open in Microsoft OneNote"
+                      title="Open Exact Match in OneNote"
                     >
-                      <ExternalLink size={13} /> Open in OneNote
+                      <ExternalLink size={13} /> Open Exact Match in OneNote
                     </a>
                   </div>
                 </div>

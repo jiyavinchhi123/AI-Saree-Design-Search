@@ -68,8 +68,8 @@ async def health_check():
     return {
         "status": "healthy",
         "service": "AI Saree Design Search",
-        "total_indexed_designs": vector_index.count(),
-        "color_invariant_engine": "MobileNetV3 Structural Tensor + Spatial Orientation HOG",
+        "total_indexed_designs": vector_index_mgr.count(),
+        "color_invariant_engine": "DINOv2 (ViT-B/14) Structural Motif Embeddings",
         "vector_search": "FAISS IndexFlatIP (Cosine Similarity)"
     }
 

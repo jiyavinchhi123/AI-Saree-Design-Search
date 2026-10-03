@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useMemo } from 'react';
 import { 
   UploadCloud, 
   Search, 
@@ -17,7 +17,7 @@ import {
   Layers,
   ShieldCheck
 } from 'lucide-react';
-import { api, getCleanOneNoteUrl, getCleanOneNoteClientUrl, getCleanOneNoteWebUrl } from '../services/api';
+import { api, getExactPageWebUrl, getCleanOneNoteUrl, getCleanOneNoteClientUrl, getCleanOneNoteWebUrl } from '../services/api';
 import OneNoteBreadcrumb from '../components/OneNoteBreadcrumb';
 import StructuralMapModal from '../components/StructuralMapModal';
 
@@ -77,7 +77,10 @@ export default function SearchDesign() {
     setIsSearching(true);
     setErrorMsg(null);
     try {
-      const res = await api.searchByImage(selectedFile, threshold, 6);
+      // Baseline retrieval with top_k: 50 so all candidate matches in the catalog
+      // are retrieved, allowing the client-side confidence threshold slider
+      // to filter in real time without running another AI search.
+      const res = await api.searchByImage(selectedFile, 0.0, 50);
       setSearchResult(res);
     } catch (err) {
       console.error('Search error:', err);
@@ -87,9 +90,44 @@ export default function SearchDesign() {
     }
   };
 
+  // Convert threshold (e.g. 0.82) to integer percentage (82)
+  const thresholdPct = Math.round(threshold <= 1 ? threshold * 100 : threshold);
+
+  // Apply minimum similarity filter immediately to existing search results without re-searching
+  // Results below the threshold are hidden; results >= threshold (including exact equality) are shown
+  const filteredMatches = useMemo(() => {
+    if (!searchResult?.matches) return [];
+    return searchResult.matches.filter((m) => {
+      const scorePct = typeof m.similarity_percentage === 'number'
+        ? m.similarity_percentage
+        : (typeof m.similarity_score === 'number' ? m.similarity_score * 100 : 0);
+      return (scorePct + 0.0001) >= thresholdPct;
+    });
+  }, [searchResult, thresholdPct]);
+
   // Split matches into top match and other similar designs
-  const topMatch = (searchResult?.matches && searchResult.matches.length > 0) ? searchResult.matches[0] : null;
-  const otherMatches = (searchResult?.matches && searchResult.matches.length > 1) ? searchResult.matches.slice(1) : [];
+  const isMatchFound = filteredMatches.length > 0;
+  const topMatch = isMatchFound ? filteredMatches[0] : null;
+  const otherMatches = filteredMatches.length > 1 ? filteredMatches.slice(1) : [];
+
+  const handleOpenExactMatch = (item) => {
+    if (!item) return;
+    const targetUrl = item.page_web_url || item.oneNoteWebUrl || getExactPageWebUrl(item);
+    console.log('[OneNote Navigation] Open Exact Match in OneNote:', {
+      page_id: item.page_id,
+      page_title: item.page_title || item.title,
+      stored_page_web_url: item.page_web_url,
+      window_open_url: targetUrl
+    });
+
+    if (targetUrl && targetUrl.startsWith('https://') && !targetUrl.toLowerCase().startsWith('onenote:')) {
+      window.open(targetUrl, '_blank', 'noopener,noreferrer');
+      return;
+    }
+
+    console.error('[OneNote Navigation] ERROR: No valid page-specific OneNote HTTPS URL found on record:', item);
+    alert('Specific OneNote page web URL not found for this design.');
+  };
 
   return (
     <div className="page-container" id="search-design-page">
@@ -253,7 +291,7 @@ export default function SearchDesign() {
                 id="threshold-slider"
                 type="range" 
                 min="0.50" 
-                max="0.95" 
+                max="1.00" 
                 step="0.01" 
                 value={threshold} 
                 onChange={(e) => setThreshold(parseFloat(e.target.value))}
@@ -327,26 +365,32 @@ export default function SearchDesign() {
           {/* Status Banner */}
           <div 
             id="search-status-banner"
-            className={`results-header-banner ${searchResult.is_strong_match ? 'banner-match-strong' : 'banner-no-match'}`}
+            className={`results-header-banner ${isMatchFound ? 'banner-match-strong' : 'banner-no-match'}`}
           >
             <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-              {searchResult.is_strong_match ? (
+              {isMatchFound ? (
                 <CheckCircle2 size={26} style={{ color: 'var(--accent-emerald)', flexShrink: 0 }} />
               ) : (
                 <AlertCircle size={26} style={{ color: 'var(--gold-primary)', flexShrink: 0 }} />
               )}
               <div>
                 <div style={{ fontWeight: 800, fontSize: '1.15rem' }}>
-                  {searchResult.is_strong_match ? 'Design Match Confirmed in OneNote Archive!' : 'No strong design match found.'}
+                  {isMatchFound ? 'Design Match Confirmed in OneNote Archive!' : 'No matching designs found above the selected threshold.'}
                 </div>
                 <div style={{ fontSize: '0.84rem', opacity: 0.95, marginTop: '2px' }}>
-                  {searchResult.status_message} (Top result: {searchResult.top_percentage}%, Required threshold: {Math.round(searchResult.threshold * 100)}%)
+                  {isMatchFound ? (
+                    `Found ${filteredMatches.length} design${filteredMatches.length > 1 ? 's' : ''} matching at or above ${thresholdPct}% confidence (Top match: ${topMatch?.similarity_percentage}%).`
+                  ) : (
+                    searchResult.matches && searchResult.matches.length > 0
+                      ? `Top candidate match in archive is ${searchResult.matches[0].similarity_percentage}%. Lower the threshold slider to view closer matches.`
+                      : 'No indexed designs in catalog.'
+                  )}
                 </div>
               </div>
             </div>
 
             <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
-              {searchResult.is_strong_match && topMatch && (
+              {isMatchFound && topMatch && (
                 <button
                   id="btn-banner-open-exact"
                   className="btn-primary"
@@ -358,23 +402,14 @@ export default function SearchDesign() {
                     padding: '8px 16px',
                     fontWeight: 700
                   }}
-                  title={`Open exact image in OneNote Desktop: ${topMatch.notebook_name} > ${topMatch.section_name} > ${topMatch.page_title || topMatch.title}`}
-                  onClick={async () => {
-                    try {
-                      const res = await api.openInOneNote(topMatch.id, 'desktop');
-                      const target = res?.client_url || topMatch.object_client_url || topMatch.onenote_client_url;
-                      if (target) window.location.href = target;
-                    } catch {
-                      const fallback = topMatch.object_client_url || topMatch.object_web_url || topMatch.onenote_web_url;
-                      if (fallback) window.location.href = fallback;
-                    }
-                  }}
+                  title={`Open exact image in OneNote: ${topMatch.notebook_name} > ${topMatch.section_name} > ${topMatch.page_title || topMatch.title}`}
+                  onClick={() => handleOpenExactMatch(topMatch)}
                 >
-                  <ExternalLink size={14} /> Open Exact Match
+                  <ExternalLink size={14} /> Open Exact Match in OneNote
                 </button>
               )}
               <span style={{ fontSize: '0.80rem', color: 'var(--text-muted)' }}>
-                Indexed Catalog: <strong>{searchResult.total_indexed}</strong> designs
+                Indexed Catalog: <strong>{searchResult.total_indexed || searchResult.matches?.length || 0}</strong> designs
               </span>
             </div>
           </div>
@@ -424,6 +459,38 @@ export default function SearchDesign() {
                 <div className="saas-card" style={{ textAlign: 'center', padding: '50px', color: 'var(--text-muted)' }}>
                   No indexed designs found. Please connect your OneNote account in OneNote Integration to populate the catalog.
                 </div>
+              ) : filteredMatches.length === 0 ? (
+                <div 
+                  id="no-threshold-matches"
+                  className="saas-card" 
+                  style={{ 
+                    textAlign: 'center', 
+                    padding: '50px 30px', 
+                    color: 'var(--text-secondary)',
+                    borderRadius: 'var(--radius-lg)',
+                    border: '1px solid var(--border-subtle)',
+                    background: 'var(--bg-card)'
+                  }}
+                >
+                  <div style={{
+                    width: '54px',
+                    height: '54px',
+                    borderRadius: '50%',
+                    background: 'var(--gold-light)',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    marginBottom: '16px'
+                  }}>
+                    <AlertCircle size={28} style={{ color: 'var(--gold-primary)' }} />
+                  </div>
+                  <div style={{ fontSize: '1.2rem', fontWeight: 800, color: 'var(--text-main)', marginBottom: '8px' }}>
+                    No matching designs found above the selected threshold.
+                  </div>
+                  <div style={{ fontSize: '0.88rem', color: 'var(--text-muted)', maxWidth: '440px', margin: '0 auto', lineHeight: 1.5 }}>
+                    The confidence threshold is currently set to <strong>{thresholdPct}%</strong>. Adjust the slider above to a lower threshold to view candidate designs.
+                  </div>
+                </div>
               ) : (
                 <div>
                   {/* Highlighted Top Match */}
@@ -462,6 +529,8 @@ export default function SearchDesign() {
                             section={topMatch.section_name} 
                             page={topMatch.page_title} 
                             imageOrder={topMatch.image_order}
+                            item={topMatch}
+                            copyUrl={getExactPageWebUrl(topMatch)}
                           />
 
                           {topMatch.motifs && topMatch.motifs.length > 0 && (
@@ -491,34 +560,27 @@ export default function SearchDesign() {
                               <button 
                                 className="btn-primary"
                                 id={`btn-open-onenote-${topMatch.id}`}
-                                title={`Open exact matched image in OneNote Desktop: ${topMatch.notebook_name} > ${topMatch.section_name} > ${topMatch.page_title || topMatch.title}`}
-                                onClick={async (e) => {
+                                title={`Open exact matched page in OneNote: ${topMatch.notebook_name} > ${topMatch.section_name} > ${topMatch.page_title || topMatch.title}`}
+                                onClick={(e) => {
                                   e.preventDefault();
-                                  try {
-                                    const res = await api.openInOneNote(topMatch.id, 'desktop');
-                                    const target = res?.client_url || topMatch.object_client_url || topMatch.onenote_client_url;
-                                    if (target) window.location.href = target;
-                                  } catch (err) {
-                                    console.error('OneNote exact match redirect error:', err);
-                                    const fallback = topMatch.object_client_url || topMatch.object_web_url || topMatch.onenote_web_url;
-                                    if (fallback) window.location.href = fallback;
-                                  }
+                                  handleOpenExactMatch(topMatch);
                                 }}
                               >
                                 <ExternalLink size={14} /> Open Exact Match in OneNote
                               </button>
 
-                              <a
-                                href={topMatch.object_web_url || topMatch.onenote_web_url || getCleanOneNoteWebUrl(topMatch)}
-                                target="_blank"
-                                rel="noopener noreferrer"
+                              <button
                                 className="btn-secondary"
                                 style={{ padding: '8px 12px', fontSize: '0.78rem' }}
-                                title="Open exact image in OneNote Online"
+                                title="Open exact page in OneNote Online"
                                 id={`btn-open-web-${topMatch.id}`}
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  handleOpenExactMatch(topMatch);
+                                }}
                               >
                                 <Globe size={14} />
-                              </a>
+                              </button>
                             </div>
                           </div>
                         </div>
@@ -562,6 +624,8 @@ export default function SearchDesign() {
                                   section={match.section_name} 
                                   page={match.page_title} 
                                   imageOrder={match.image_order}
+                                  item={match}
+                                  copyUrl={getExactPageWebUrl(match)}
                                 />
 
                                 <div className="match-card-footer">
@@ -583,32 +647,26 @@ export default function SearchDesign() {
                                     <button 
                                       className="btn-onenote"
                                       id={`btn-open-onenote-${match.id}`}
-                                      title={`Open in OneNote Desktop`}
-                                      onClick={async (e) => {
+                                      title="Open Exact Match in OneNote"
+                                      onClick={(e) => {
                                         e.preventDefault();
-                                        try {
-                                          const res = await api.openInOneNote(match.id, 'desktop');
-                                          const target = res?.client_url || match.object_client_url || match.onenote_client_url;
-                                          if (target) window.location.href = target;
-                                        } catch {
-                                          const fallback = match.object_client_url || match.object_web_url || match.onenote_web_url;
-                                          if (fallback) window.location.href = fallback;
-                                        }
+                                        handleOpenExactMatch(match);
                                       }}
                                     >
-                                      <ExternalLink size={12} /> Open
+                                      <ExternalLink size={12} /> Open Exact Match in OneNote
                                     </button>
 
-                                    <a
-                                      href={match.object_web_url || match.onenote_web_url || getCleanOneNoteWebUrl(match)}
-                                      target="_blank"
-                                      rel="noopener noreferrer"
+                                    <button
                                       className="btn-secondary"
                                       style={{ padding: '6px 9px', fontSize: '0.75rem' }}
-                                      title="Open in OneNote Online"
+                                      title="Open exact page in OneNote Online"
+                                      onClick={(e) => {
+                                        e.preventDefault();
+                                        handleOpenExactMatch(match);
+                                      }}
                                     >
                                       <Globe size={12} />
-                                    </a>
+                                    </button>
                                   </div>
                                 </div>
                               </div>

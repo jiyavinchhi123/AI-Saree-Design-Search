@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.models import SearchResponse
 from app.database import get_db, SearchHistoryRecord, UserRecord
+from app.onenote.link_builder import extract_page_web_url
 
 router = APIRouter(prefix="/api/search", tags=["Search"])
 
@@ -84,24 +85,22 @@ async def search_saree_design(
     top_percentage = search_results["top_percentage"]
     status_msg = search_results["status_message"]
 
-    from app.onenote.link_builder import get_exact_image_hyperlinks
-
-    enriched_matches = []
+    matches = []
     for m in raw_matches:
-        links = get_exact_image_hyperlinks(m)
-        m["page_id"] = links["page_id"]
-        m["object_id"] = links["object_id"]
-        m["object_client_url"] = links["object_client_url"]
-        m["object_web_url"] = links["object_web_url"]
-        m["fallback_client_url"] = links["fallback_client_url"]
-        m["fallback_web_url"] = links["fallback_web_url"]
-        m["image_order"] = links["image_order"]
-        m["image_position"] = links["image_position"]
-        # Primary URLs now point directly to the exact matched image object or reliable fallback
-        m["onenote_client_url"] = links["client_url"]
-        m["onenote_web_url"] = links["object_web_url"] or links["fallback_web_url"]
-        enriched_matches.append(m)
-    matches = enriched_matches
+        # PURE DYNAMIC RETRIEVAL:
+        # Return the EXACT metadata stored at indexing time without any post-search reconstruction.
+        item = dict(m)
+        item["image_id"] = item.get("image_id") or item.get("design_id") or item.get("id")
+        item["design_id"] = item["image_id"]
+        item["id"] = item["image_id"]
+        
+        # Exact stored page-level web URL directly from Microsoft Graph:
+        page_web_url = item.get("page_web_url") or item.get("oneNoteWebUrl") or item.get("onenote_web_url")
+        item["page_web_url"] = page_web_url
+        item["oneNoteWebUrl"] = page_web_url
+        item["onenote_web_url"] = page_web_url
+        item["web_url"] = page_web_url
+        matches.append(item)
 
     # 6. Record to Search History
     top_match = matches[0] if matches else None
@@ -122,8 +121,9 @@ async def search_saree_design(
         top_match_page_id=top_match.get("page_id") if top_match else None,
         top_match_object_id=top_match.get("object_id") if top_match else None,
         top_match_object_url=top_match.get("object_web_url") if top_match else None,
+        top_match_page_web_url=top_match.get("page_web_url") if top_match else None,
         top_match_order=top_match.get("image_order") if top_match else None,
-        onenote_web_url=top_match.get("object_web_url") if top_match else None
+        onenote_web_url=top_match.get("page_web_url") if top_match else None
     )
     db.add(history_entry)
     db.commit()

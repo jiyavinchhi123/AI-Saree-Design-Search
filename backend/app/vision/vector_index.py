@@ -133,26 +133,53 @@ class SareeVectorIndex:
         if os.path.exists(self.meta_file):
             os.remove(self.meta_file)
 
+    def rebuild(self, embeddings: List[np.ndarray], metadatas: List[Dict[str, Any]]):
+        """Rebuilds the index completely from the authoritative list of current cloud items."""
+        self.index = faiss.IndexFlatIP(self.dimension)
+        self.metadata_store = []
+        if embeddings and len(embeddings) > 0:
+            stacked = np.vstack(embeddings).astype(np.float32)
+            self.index.add(stacked)
+            for idx, meta in enumerate(metadatas):
+                meta["index_id"] = idx
+                self.metadata_store.append(meta)
+        self.save()
+
     def count(self) -> int:
         return self.index.ntotal
 
 
 class VectorIndexManager:
-    """Manages dedicated, isolated SareeVectorIndex instances per user."""
+    """
+    Manages dedicated, isolated SareeVectorIndex instances per user.
+    Microsoft OneNote Cloud is the SINGLE SOURCE OF TRUTH.
+    Never loads legacy archives, desktop backups, or stale indexes.
+    """
     def __init__(self, base_dir: str = "data/indexes", dimension: int = 1536):
         self.base_dir = base_dir
         self.dimension = dimension
         self._user_indexes: Dict[str, SareeVectorIndex] = {}
-        # Default index
-        self._default_index = SareeVectorIndex(
+        # Empty placeholder with 0 designs for unauthenticated state
+        self._empty_index = SareeVectorIndex(
             dimension=self.dimension,
-            index_file=os.path.join(base_dir, "saree_faiss.index"),
-            meta_file=os.path.join(base_dir, "saree_meta.json")
+            index_file=os.path.join(base_dir, "empty_faiss.index"),
+            meta_file=os.path.join(base_dir, "empty_meta.json")
         )
 
     def get_index(self, user_id: Optional[str] = None) -> SareeVectorIndex:
         if not user_id:
-            return self._default_index
+            try:
+                from app.database import SessionLocal, UserRecord
+                db = SessionLocal()
+                active_user = db.query(UserRecord).order_by(UserRecord.connected_at.desc()).first()
+                if active_user:
+                    user_id = active_user.id
+                db.close()
+            except Exception:
+                pass
+
+        if not user_id:
+            return self._empty_index
 
         safe_uid = re.sub(r'[^a-zA-Z0-9_\-]', '_', user_id)
         if safe_uid not in self._user_indexes:
@@ -179,4 +206,4 @@ class VectorIndexManager:
 
     @property
     def metadata_store(self) -> List[Dict[str, Any]]:
-        return self._default_index.metadata_store
+        return self.get_index().metadata_store

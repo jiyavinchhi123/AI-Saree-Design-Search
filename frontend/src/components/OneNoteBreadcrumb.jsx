@@ -1,7 +1,9 @@
 import React, { useState } from 'react';
 import { BookOpen, Folder, FileText, ChevronRight, Copy, Check, Image as ImageIcon } from 'lucide-react';
 
-export default function OneNoteBreadcrumb({ notebook, section, page, imageOrder }) {
+import { getExactPageWebUrl } from '../services/api';
+
+export default function OneNoteBreadcrumb({ notebook, section, page, imageOrder, item, copyUrl }) {
   const [copied, setCopied] = useState(false);
 
   // Clean RoboFlow suffixes or raw filename formatting if present
@@ -24,12 +26,39 @@ export default function OneNoteBreadcrumb({ notebook, section, page, imageOrder 
     ? `${cleanNb} > ${cleanSec} > ${cleanPg} > ${orderStr}`
     : `${cleanNb} > ${cleanSec} > ${cleanPg}`;
 
-  const handleCopy = (e) => {
+  // Primary: exact stored HTTPS page-level web URL (same URL used by Open button)
+  const targetWebUrl = item?.page_web_url || item?.oneNoteWebUrl || (item ? getExactPageWebUrl(item) : '') || copyUrl;
+  const urlToCopy = (targetWebUrl && targetWebUrl.startsWith('https://') && !targetWebUrl.toLowerCase().startsWith('onenote:')) ? targetWebUrl : '';
+
+  const handleCopy = async (e) => {
     e.stopPropagation();
     e.preventDefault();
-    navigator.clipboard.writeText(fullPath);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    if (!urlToCopy) {
+      alert('Specific OneNote page web URL not found on record to copy.');
+      return;
+    }
+    console.log('[OneNote Navigation] Breadcrumb Copy Clicked. Copied page URL:', urlToCopy);
+    try {
+      await navigator.clipboard.writeText(urlToCopy);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch (err) {
+      const textArea = document.createElement("textarea");
+      textArea.value = urlToCopy;
+      textArea.style.position = "fixed";
+      textArea.style.left = "-999999px";
+      document.body.appendChild(textArea);
+      textArea.focus();
+      textArea.select();
+      try {
+        document.execCommand('copy');
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+      } catch (e2) {
+        console.error('Failed to copy', e2);
+      }
+      document.body.removeChild(textArea);
+    }
   };
 
   return (
@@ -84,13 +113,14 @@ export default function OneNoteBreadcrumb({ notebook, section, page, imageOrder 
       <button 
         type="button"
         onClick={handleCopy}
-        title="Copy full OneNote location hierarchy"
+        title={targetWebUrl && targetWebUrl.startsWith('https://') ? "Copy OneNote exact match web link" : "Copy full OneNote location hierarchy"}
+        id="btn-copy-breadcrumb-link"
         style={{
           background: copied ? 'var(--emerald-light)' : '#ffffff',
           border: '1px solid',
           borderColor: copied ? 'var(--emerald-border)' : 'var(--border-subtle)',
           borderRadius: '4px',
-          padding: '3px 6px',
+          padding: '3px 8px',
           color: copied ? 'var(--accent-emerald)' : 'var(--text-muted)',
           display: 'inline-flex',
           alignItems: 'center',
@@ -98,11 +128,12 @@ export default function OneNoteBreadcrumb({ notebook, section, page, imageOrder 
           fontSize: '0.68rem',
           fontWeight: 600,
           cursor: 'pointer',
-          flexShrink: 0
+          flexShrink: 0,
+          transition: 'all 0.15s ease'
         }}
       >
         {copied ? <Check size={11} /> : <Copy size={11} />}
-        {copied && <span>Copied</span>}
+        {copied && <span>Link copied</span>}
       </button>
     </div>
   );

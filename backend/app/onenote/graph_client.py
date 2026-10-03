@@ -347,53 +347,62 @@ class MicrosoftOneNoteClient:
                     req_url,
                     headers={"Authorization": f"Bearer {access_token}"}
                 )
+                print(f"[OneNote Graph] Page content GET {req_url} -> HTTP {resp.status_code} ({len(resp.text)} bytes)", flush=True)
                 if resp.status_code != 200:
-                    print(f"[OneNote Graph] Page content fetch error: HTTP {resp.status_code} for {req_url}")
+                    print(f"[OneNote Graph] Page content fetch error: HTTP {resp.status_code} for {req_url}", flush=True)
                     return "", []
 
                 html = resp.text
-                img_tag_pattern = re.compile(r'<img\s+([^>]+)>', re.IGNORECASE)
-                src_pattern = re.compile(r'src=["\']([^"\']+)["\']', re.IGNORECASE)
-                id_pattern = re.compile(r'\bid=["\']([^"\']+)["\']', re.IGNORECASE)
-                data_id_pattern = re.compile(r'data-id=["\']([^"\']+)["\']', re.IGNORECASE)
-                data_data_id_pattern = re.compile(r'data-data-id=["\']([^"\']+)["\']', re.IGNORECASE)
+                from html.parser import HTMLParser
+
+                class OneNoteImgTagParser(HTMLParser):
+                    def __init__(self):
+                        super().__init__()
+                        self.img_nodes = []
+                    def handle_starttag(self, tag, attrs):
+                        if tag.lower() == 'img':
+                            self.img_nodes.append({k.lower(): v for k, v in attrs})
+
+                parser = OneNoteImgTagParser()
+                parser.feed(html)
+                print(f"[OneNote Graph] Total <img> elements parsed by HTMLParser: {len(parser.img_nodes)}", flush=True)
 
                 resources = []
-                img_matches = img_tag_pattern.findall(html)
-                for order, tag_attrs in enumerate(img_matches, start=1):
-                    src_m = src_pattern.search(tag_attrs)
-                    if not src_m:
-                        continue
-                    src = src_m.group(1)
-                    if "onenote/resources" in src or "graph.microsoft.com" in src:
-                        # 1. Real OneNote image element/object ID from <img id="...">
-                        id_m = id_pattern.search(tag_attrs)
-                        real_object_id = id_m.group(1) if id_m else None
+                for order, attrs in enumerate(parser.img_nodes, start=1):
+                    # 1. Real OneNote image element/object ID from id="..."
+                    real_object_id = attrs.get("id") or attrs.get("data-id")
 
-                        # 2. Resource ID from data-data-id, data-id, or src URL
-                        data_data_id_m = data_data_id_pattern.search(tag_attrs)
-                        data_id_m = data_id_pattern.search(tag_attrs)
-                        u_m = re.search(r'resources/([^/\?"]+)', src)
+                    # 2. Resource URL from data-fullres-src, src, or data-src
+                    res_url = attrs.get("data-fullres-src") or attrs.get("src") or attrs.get("data-src")
 
-                        res_id = (
-                            (data_data_id_m.group(1) if data_data_id_m else None) or
-                            (data_id_m.group(1) if data_id_m else None) or
-                            (u_m.group(1) if u_m else None)
-                        )
+                    # 3. Resource ID from data-data-id, data-id, or URL
+                    res_id = attrs.get("data-data-id") or attrs.get("data-id")
+                    if not res_id and res_url:
+                        u_m = re.search(r'resources/([^/\?]+)', res_url)
+                        if u_m:
+                            res_id = u_m.group(1)
 
-                        # Store actual element object ID separate from resource ID
+                    print(f"[OneNote Graph]   Image #{order}:", flush=True)
+                    print(f"    <img id=\"...\">:     {real_object_id}", flush=True)
+                    print(f"    data-id:              {attrs.get('data-id')}", flush=True)
+                    print(f"    data-data-id:         {attrs.get('data-data-id')}", flush=True)
+                    print(f"    data-fullres-src:     {attrs.get('data-fullres-src')}", flush=True)
+                    print(f"    src:                  {attrs.get('src')}", flush=True)
+                    print(f"    resource_id:          {res_id}", flush=True)
+
+                    if res_url and ("onenote/resources" in res_url or "graph.microsoft.com" in res_url):
                         resources.append({
-                            "resource_url": src,
+                            "resource_url": res_url,
                             "resource_id": res_id or f"res_{order}",
-                            "object_id": real_object_id or res_id or f"obj_{order}",
+                            "object_id": real_object_id,
                             "image_order": order,
                             "image_position": f"Image #{order} on page"
                         })
 
                 return html, resources
         except Exception as e:
-            print(f"[OneNote] Get page content error: {e}")
-        return "", []
+            print(f"[OneNote Graph] Get page content error: {e}", flush=True)
+            return "", []
 
     async def download_image_resource(self, resource_url: str, save_path: str, access_token: str) -> bool:
         """Downloads a binary image attachment from Microsoft Graph API."""

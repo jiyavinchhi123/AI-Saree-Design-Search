@@ -55,13 +55,22 @@ async def get_onenote_status(
         if "notebook_name" in item:
             notebooks.add(item["notebook_name"])
 
+    # Live notebooks count directly from Graph if connected
+    notebooks_count = len(notebooks)
+    if is_connected and token:
+        try:
+            live_nbs = await onenote_client.list_notebooks(token)
+            notebooks_count = len(live_nbs)
+        except Exception:
+            pass
+
     return OneNoteSyncStatus(
         is_configured=onenote_client.is_configured(),
         is_connected=is_connected,
         user_id=user.id,
         user_email=user.email,
         display_name=user.display_name,
-        notebooks_count=len(notebooks),
+        notebooks_count=notebooks_count,
         indexed_designs_count=user_index.count(),
         last_synced=user.last_synced_at.isoformat() if user.last_synced_at else None
     )
@@ -238,157 +247,32 @@ async def get_user_notebooks(
         "total_notebooks": len(notebooks)
     }
 
-def sync_local_onenote_backups(user_id: str, user_storage_dir: str, user_index, db: Session, extractor, selected_nb_names=None) -> int:
+def validate_graph_page_web_url(url: Optional[str]) -> tuple[bool, Optional[str]]:
     """
-    Scans Windows OneNote local backup/cache sections for designs.
-    Ensures sections held locally (or blocked from cloud sync due to OneDrive storage quota)
-    are seamlessly ingested into the AI index with full hierarchy and deep links.
+    Validates that a URL is a valid, specific page-level web navigation URL
+    directly from Microsoft Graph's links.oneNoteWebUrl.href.
+    
+    Backend Validation Requirements:
+    - URL must start with https://
+    - URL must NOT start with onenote:
+    - URL must NOT be a generic OneNote homepage
+    - URL must come directly from Graph's links.oneNoteWebUrl.href without synthetic construction
     """
-    backup_root = os.path.expanduser(r"~\AppData\Local\Microsoft\OneNote\16.0\Backup")
-    if not os.path.exists(backup_root):
-        return 0
+    if not url or not isinstance(url, str):
+        return False, "Microsoft Graph did not return links.oneNoteWebUrl.href for this page."
+    cleaned = url.strip()
+    if not cleaned.startswith("https://"):
+        return False, f"Invalid URL scheme: URL must start with https:// ({cleaned[:40]}...)"
+    if cleaned.lower().startswith("onenote:"):
+        return False, "Invalid protocol: URL must not use the onenote: desktop protocol."
+    lower = cleaned.lower()
+    if (
+        lower in ("https://onenote.com", "https://onenote.com/", "https://www.onenote.com", "https://www.onenote.com/", "https://onedrive.live.com", "https://onedrive.live.com/")
+        or lower.startswith("https://www.onenote.com/notebooks")
+    ):
+        return False, f"Generic OneNote homepage rejected; must be a specific page web URL ({cleaned})"
+    return True, None
 
-    safe_uid = re.sub(r'[^a-zA-Z0-9_\-]', '_', user_id)
-    existing_ids = {item.get("id") or item.get("design_id") for item in user_index.metadata_store}
-    indexed_from_local = 0
-
-    for nb_dir_name in os.listdir(backup_root):
-        nb_dir = os.path.join(backup_root, nb_dir_name)
-        if not os.path.isdir(nb_dir):
-            continue
-        if selected_nb_names and nb_dir_name not in selected_nb_names:
-            continue
-
-        for fname in os.listdir(nb_dir):
-            if not fname.endswith(".one") or "OneNote_RecycleBin" in fname:
-                continue
-
-            clean_sec_name = re.sub(r'\s*\(On\s+[\d\-]+\)\.one$', '', fname)
-            clean_sec_name = re.sub(r'\.one$', '', clean_sec_name).strip()
-
-            file_path = os.path.join(nb_dir, fname)
-            try:
-                file_size = os.path.getsize(file_path)
-                if file_size < 100000:
-                    continue
-
-                with open(file_path, "rb") as f:
-                    data = f.read()
-
-                pos = 0
-                img_order_counter = 0
-                while True:
-                    start = data.find(b"\xff\xd8\xff", pos)
-                    if start == -1:
-                        break
-                    end = data.find(b"\xff\xd9", start)
-                    if end == -1:
-                        break
-                    img_bytes = data[start:end+2]
-                    pos = end + 2
-
-                    if len(img_bytes) > 20000:
-                        img_order_counter += 1
-                        img_hash = hashlib.sha256(img_bytes).hexdigest()[:8].upper()
-                        design_id = f"ONENOTE-{safe_uid[:6]}-{img_hash}"
-
-                        if design_id in existing_ids:
-                            continue
-
-                        filename = f"{design_id}.jpg"
-                        save_path = os.path.join(user_storage_dir, filename)
-
-                        nparr = np.frombuffer(img_bytes, np.uint8)
-                        img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-                        if img is None:
-                            continue
-
-                        cv2.imwrite(save_path, img)
-
-                        try:
-                            embedding, structural_map = extractor.extract_features_from_image(img)
-                            prev_name = f"struct_{design_id}.jpg"
-                            struct_path = os.path.join(user_storage_dir, prev_name)
-                            cv2.imwrite(struct_path, structural_map)
-
-                            from app.onenote.link_builder import build_object_client_url, build_object_web_url
-                            page_id_str = f"0-{safe_uid}-p-{re.sub(r'[^a-zA-Z0-9]', '-', clean_sec_name.lower())}"
-                            obj_id_str = f"img-obj-{img_hash}"
-
-                            sec_enc = urllib.parse.quote(clean_sec_name)
-                            nb_enc = urllib.parse.quote(nb_dir_name)
-                            web_url = f"https://onedrive.live.com/redir.aspx?cid={user_id.lower()}&page=edit&wd=target%28{sec_enc}.one%2FSaree%20designs%2F%29"
-                            client_url = f"onenote:https://d.docs.live.net/{user_id.lower()}/OneNote%20Notebooks/{nb_enc}/{sec_enc}.one#Saree%20designs&section-id={clean_sec_name}&page-id={page_id_str}&end"
-
-                            obj_client_url = build_object_client_url(
-                                base_client_url=client_url,
-                                notebook_name=nb_dir_name,
-                                section_name=clean_sec_name,
-                                page_title="Saree designs",
-                                page_id=page_id_str,
-                                object_id=obj_id_str
-                            )
-                            obj_web_url = build_object_web_url(
-                                base_web_url=web_url,
-                                page_id=page_id_str,
-                                object_id=obj_id_str
-                            )
-
-                            item_meta = {
-                                "id": design_id,
-                                "design_id": design_id,
-                                "user_id": user_id,
-                                "title": "Saree designs",
-                                "notebook_name": nb_dir_name,
-                                "section_name": clean_sec_name,
-                                "page_title": "Saree designs",
-                                "page_id": page_id_str,
-                                "object_id": obj_id_str,
-                                "image_order": img_order_counter,
-                                "image_position": f"Image #{img_order_counter} on page",
-                                "resource_id": design_id,
-                                "object_client_url": obj_client_url,
-                                "object_web_url": obj_web_url,
-                                "onenote_web_url": web_url,
-                                "onenote_client_url": client_url,
-                                "image_url": f"/api/storage/users/{safe_uid}/{filename}",
-                                "structural_preview_url": f"/api/storage/users/{safe_uid}/{prev_name}",
-                                "category": "Ikat & Silk",
-                                "source_type": "onenote_app_sync",
-                                "synced_at": datetime.utcnow().isoformat()
-                            }
-                            user_index.add_design(embedding, item_meta)
-                            existing_ids.add(design_id)
-
-                            db_record = DesignRecord(
-                                id=design_id,
-                                design_id=design_id,
-                                user_id=user_id,
-                                title="Saree designs",
-                                notebook_name=nb_dir_name,
-                                section_name=clean_sec_name,
-                                page_title="Saree designs",
-                                page_id=page_id_str,
-                                object_id=obj_id_str,
-                                image_order=img_order_counter,
-                                resource_id=design_id,
-                                object_client_url=obj_client_url,
-                                object_web_url=obj_web_url,
-                                onenote_web_url=web_url,
-                                onenote_client_url=client_url,
-                                image_url=item_meta["image_url"],
-                                structural_preview_url=item_meta["structural_preview_url"],
-                                category="Ikat & Silk",
-                                source_type="onenote_app_sync"
-                            )
-                            db.merge(db_record)
-                            indexed_from_local += 1
-                        except Exception as e:
-                            print(f"[OneNote Ingest] Error indexing local image: {e}")
-            except Exception as err:
-                print(f"[OneNote Ingest] Error reading backup file {file_path}: {err}")
-
-    return indexed_from_local
 
 @router.post("/onenote/sync")
 async def sync_onenote(
@@ -397,12 +281,16 @@ async def sync_onenote(
     db: Session = Depends(get_db)
 ):
     """
-    Scans the authenticated user's actual OneNote pages, extracts embedded saree images,
-    computes color-invariant embeddings (DINOv2), and indexes them into their isolated user index.
-    Zero write access: strictly Read-Only.
+    Microsoft OneNote Cloud is the SINGLE SOURCE OF TRUTH.
+    Scans the authenticated user's actual OneNote cloud pages, extracts embedded saree images,
+    computes color-invariant embeddings (DINOv2), and reconciles the user's isolated index.
+    - Cloud addition -> added to index and database
+    - Cloud deletion -> removed from index and database
+    - Stale / local backup / unverified records -> completely purged
+    Zero write access: strictly Read-Only (Notes.Read, User.Read).
     """
     from app.main import onenote_client, extractor, vector_index_mgr
-    from app.onenote.link_builder import build_object_client_url, build_object_web_url
+    from app.onenote.link_builder import build_object_client_url, build_object_web_url, extract_page_web_url
 
     user = None
     if x_user_id:
@@ -429,14 +317,18 @@ async def sync_onenote(
         if selected_nb_ids:
             notebooks = [nb for nb in notebooks if nb.get("id") in selected_nb_ids]
 
-        indexed_count = 0
         pages_scanned = 0
-        total_images_found = 0
+        total_sections_scanned = 0
+        cloud_embeddings = []
+        cloud_metadatas = []
+        cloud_design_ids = set()
+        unsupported_pages = []
 
         for nb in notebooks:
             nb_id = nb.get("id")
             nb_name = nb.get("displayName", "Notebook")
             sections = await onenote_client.list_sections(nb_id, token)
+            total_sections_scanned += len(sections)
 
             for sec in sections:
                 sec_id = sec.get("id")
@@ -448,132 +340,169 @@ async def sync_onenote(
                     page_id = page.get("id")
                     page_title = page.get("title", "Untitled Page")
                     content_url = page.get("contentUrl")
-                    web_url = page.get("links", {}).get("oneNoteWebUrl", {}).get("href")
-                    client_url = page.get("links", {}).get("oneNoteClientUrl", {}).get("href")
+
+                    # Requirement 1, 2, 5, 7, 10, 11:
+                    # Retrieve official Graph links.oneNoteWebUrl.href directly
+                    raw_graph_web_url = page.get("links", {}).get("oneNoteWebUrl", {}).get("href")
+                    is_valid_url, url_err = validate_graph_page_web_url(raw_graph_web_url)
+                    if not is_valid_url:
+                        print(f"[OneNote Ingest] Skipping page '{page_title}' ({page_id}): {url_err}", flush=True)
+                        unsupported_pages.append({
+                            "page_id": page_id,
+                            "page_title": page_title,
+                            "reason": f"No valid web navigation URL: {url_err}"
+                        })
+                        continue
+
+                    # Exact HTTPS value returned by Microsoft Graph (do NOT generate or transform)
+                    page_web_url = raw_graph_web_url.strip()
 
                     if not content_url:
                         continue
 
                     _, images = await onenote_client.get_page_content_and_images(content_url, token)
-                    total_images_found += len(images)
 
-                    for idx, img_info in enumerate(images):
-                        res_url = img_info.get("resource_url")
-                        if not res_url:
-                            continue
+                    # Rule 5 & 6: Each indexed OneNote page represents exactly ONE saree design/image.
+                    # If a page contains multiple images, mark it unsupported and reject it from the exact-match index.
+                    if not images or len(images) == 0:
+                        print(f"[OneNote Ingest] Skipping page '{page_title}': No images found.", flush=True)
+                        continue
 
-                        order_num = img_info.get("image_order", idx + 1)
-                        res_id = img_info.get("resource_id") or f"res_{page_id}_{order_num}"
-                        obj_id = img_info.get("object_id") or res_id
+                    if len(images) > 1:
+                        print(f"[OneNote Ingest] REJECTED page '{page_title}' ({len(images)} images found): "
+                              f"Under exact-match rules, each page must represent exactly ONE saree design. "
+                              f"Multi-image pages are marked unsupported and excluded from exact-match index.", flush=True)
+                        unsupported_pages.append({
+                            "page_id": page_id,
+                            "page_title": page_title,
+                            "image_count": len(images),
+                            "reason": "Contains multiple images; exact-match requires exactly 1 design per page."
+                        })
+                        continue
 
-                        design_id = f"MS-{safe_uid[:6]}-{uuid.uuid4().hex[:6].upper()}"
-                        filename = f"{design_id}_p{idx}.jpg"
-                        save_path = os.path.join(user_storage_dir, filename)
+                    # Exactly ONE saree image on this page:
+                    img_info = images[0]
+                    order_num = 1
+                    res_url = img_info.get("resource_url")
+                    obj_id = img_info.get("object_id")
+                    res_id = img_info.get("resource_id") or f"res_{page_id}_{order_num}"
 
+                    # Strict Production Ingestion Validation:
+                    if not obj_id:
+                        print(f"[OneNote Ingest] Skipping image on page '{page_title}' (order #{order_num}): Missing real Microsoft Graph object_id.", flush=True)
+                        continue
+
+                    if not res_url or not page_id:
+                        print(f"[OneNote Ingest] Skipping image on page '{page_title}' (order #{order_num}): Incomplete Graph metadata.", flush=True)
+                        continue
+
+                    # Deterministic design_id based on user_id, page_id and object_id
+                    clean_key = f"{page_id}_{obj_id}"
+                    key_hash = hashlib.sha256(clean_key.encode('utf-8')).hexdigest()[:8].upper()
+                    design_id = f"MS-{safe_uid[:6]}-{key_hash}"
+                    filename = f"{design_id}.jpg"
+                    save_path = os.path.join(user_storage_dir, filename)
+
+                    # Download binary image attachment from Graph if not already downloaded
+                    if not os.path.exists(save_path):
                         ok = await onenote_client.download_image_resource(res_url, save_path, token)
-                        if ok and os.path.exists(save_path):
-                            try:
-                                embedding, structural_map = extractor.extract_features_from_image(save_path)
-                                prev_name = f"struct_{design_id}.jpg"
-                                struct_path = os.path.join(user_storage_dir, prev_name)
-                                cv2.imwrite(struct_path, structural_map)
+                    else:
+                        ok = True
 
-                                obj_client_url = build_object_client_url(
-                                    base_client_url=client_url,
-                                    notebook_name=nb_name,
-                                    section_name=sec_name,
-                                    page_title=page_title,
-                                    page_id=page_id,
-                                    object_id=obj_id,
-                                    section_id=sec_id
-                                )
-                                obj_web_url = build_object_web_url(
-                                    base_web_url=web_url,
-                                    page_id=page_id,
-                                    object_id=obj_id,
-                                    notebook_name=nb_name,
-                                    section_name=sec_name,
-                                    page_title=page_title
-                                )
+                    if ok and os.path.exists(save_path):
+                        try:
+                            embedding, structural_map = extractor.extract_features_from_image(save_path)
+                            prev_name = f"struct_{design_id}.jpg"
+                            struct_path = os.path.join(user_storage_dir, prev_name)
+                            cv2.imwrite(struct_path, structural_map)
 
-                                item_meta = {
-                                    "id": design_id,
-                                    "design_id": design_id,
-                                    "user_id": user.id,
-                                    "title": page_title,
-                                    "notebook_name": nb_name,
-                                    "notebook_id": nb_id,
-                                    "section_name": sec_name,
-                                    "section_id": sec_id,
-                                    "page_title": page_title,
-                                    "page_id": page_id,
-                                    "object_id": obj_id,
-                                    "image_order": order_num,
-                                    "image_position": f"Image #{order_num} on page",
-                                    "resource_id": res_id,
-                                    "resource_url": res_url,
-                                    "object_client_url": obj_client_url,
-                                    "object_web_url": obj_web_url,
-                                    "onenote_web_url": web_url,
-                                    "onenote_client_url": client_url,
-                                    "image_url": f"/api/storage/users/{safe_uid}/{filename}",
-                                    "structural_preview_url": f"/api/storage/users/{safe_uid}/{prev_name}",
-                                    "category": sec_name,
-                                    "source_type": "onenote_live_sync",
-                                    "synced_at": datetime.utcnow().isoformat()
-                                }
-                                user_index.add_design(embedding, item_meta)
+                            # Exact metadata storage:
+                            # Requirement 6 & 7: Store exact links.oneNoteWebUrl.href without modification
+                            item_meta = {
+                                "image_id": design_id,
+                                "id": design_id,
+                                "design_id": design_id,
+                                "user_id": user.id,
+                                "title": page_title,
+                                "notebook_id": nb_id,
+                                "notebook_name": nb_name,
+                                "section_id": sec_id,
+                                "section_name": sec_name,
+                                "page_id": page_id,
+                                "page_title": page_title,
+                                "object_id": obj_id,
+                                "image_order": 1,
+                                "image_position": "Image #1 on page",
+                                "resource_id": res_id,
+                                "resource_url": res_url,
+                                "page_web_url": page_web_url,
+                                "oneNoteWebUrl": page_web_url,
+                                "onenote_web_url": page_web_url,
+                                "image_url": f"/api/storage/users/{safe_uid}/{filename}",
+                                "structural_preview_url": f"/api/storage/users/{safe_uid}/{prev_name}",
+                                "category": sec_name,
+                                "source_type": "onenote_live_sync",
+                                "is_verified_graph": True,
+                                "synced_at": datetime.utcnow().isoformat()
+                            }
+                            cloud_embeddings.append(embedding)
+                            cloud_metadatas.append(item_meta)
+                            cloud_design_ids.add(design_id)
+                            print(f"[OneNote Ingest] Verified cloud design page: '{page_title}' ({page_id}) -> {design_id}", flush=True)
+                            print(f"  Exact Graph links.oneNoteWebUrl.href: {page_web_url}", flush=True)
+                        except Exception as img_err:
+                            print(f"[OneNote Ingest] Error indexing image {res_url}: {img_err}", flush=True)
 
-                                db_record = DesignRecord(
-                                    id=design_id,
-                                    design_id=design_id,
-                                    user_id=user.id,
-                                    title=page_title,
-                                    notebook_name=nb_name,
-                                    section_name=sec_name,
-                                    page_title=page_title,
-                                    page_id=page_id,
-                                    object_id=obj_id,
-                                    image_order=order_num,
-                                    resource_id=res_id,
-                                    resource_url=res_url,
-                                    object_client_url=obj_client_url,
-                                    object_web_url=obj_web_url,
-                                    onenote_web_url=web_url,
-                                    onenote_client_url=client_url,
-                                    image_url=item_meta["image_url"],
-                                    structural_preview_url=item_meta["structural_preview_url"],
-                                    category=sec_name,
-                                    source_type="onenote_live_sync"
-                                )
-                                db.merge(db_record)
-                                indexed_count += 1
-                            except Exception as img_err:
-                                print(f"[OneNote Ingest] Error indexing image {res_url}: {img_err}")
+        # RECONCILIATION: CLOUD IS THE ONLY SOURCE OF TRUTH
+        # Rebuild vector index completely from active cloud items (handles additions, updates & deletions)
+        user_index.rebuild(cloud_embeddings, cloud_metadatas)
 
-        # Scan local OneNote backup sections for sections not synced to cloud
-        local_added = sync_local_onenote_backups(
-            user_id=user.id,
-            user_storage_dir=user_storage_dir,
-            user_index=user_index,
-            db=db,
-            extractor=extractor
-        )
-        indexed_count += local_added
+        # In Database: Remove any designs for this user that no longer exist in OneNote cloud
+        all_user_db_records = db.query(DesignRecord).filter(DesignRecord.user_id == user.id).all()
+        for rec in all_user_db_records:
+            if rec.id not in cloud_design_ids:
+                db.delete(rec)
 
-        # Save user's isolated index
-        user_index.save()
+        # Upsert active cloud designs in Database
+        for meta in cloud_metadatas:
+            db_record = DesignRecord(
+                id=meta["design_id"],
+                design_id=meta["design_id"],
+                user_id=user.id,
+                title=meta["title"],
+                notebook_id=meta.get("notebook_id"),
+                notebook_name=meta.get("notebook_name"),
+                section_id=meta.get("section_id"),
+                section_name=meta.get("section_name"),
+                page_title=meta.get("page_title"),
+                page_id=meta.get("page_id"),
+                object_id=meta.get("object_id"),
+                image_order=meta.get("image_order", 1),
+                resource_id=meta.get("resource_id"),
+                resource_url=meta.get("resource_url"),
+                page_web_url=meta["page_web_url"],
+                onenote_web_url=meta["page_web_url"],
+                image_url=meta["image_url"],
+                structural_preview_url=meta["structural_preview_url"],
+                category=meta["category"],
+                source_type="onenote_live_sync"
+            )
+            db.merge(db_record)
+
         user.last_synced_at = datetime.utcnow()
         user.total_designs = user_index.count()
         db.commit()
 
         return {
             "status": "success",
-            "message": f"Successfully indexed {indexed_count} saree design images from OneNote ({pages_scanned} pages scanned, {local_added} from local desktop section).",
-            "indexed_count": indexed_count,
+            "message": f"Cloud synchronization complete. {user_index.count()} cloud saree designs indexed across {pages_scanned} pages.",
+            "notebooks_found": len(notebooks),
+            "sections_found": total_sections_scanned,
             "pages_scanned": pages_scanned,
-            "total_images_found": total_images_found + local_added,
-            "total_user_designs": user_index.count()
+            "total_images_found": len(cloud_metadatas),
+            "indexed_count": user_index.count(),
+            "total_user_designs": user_index.count(),
+            "unsupported_pages": unsupported_pages
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"OneNote sync failed: {str(e)}")

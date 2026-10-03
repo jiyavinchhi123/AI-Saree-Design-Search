@@ -39,7 +39,9 @@ class DesignRecord(Base):
     design_id = Column(String(64), index=True)
     user_id = Column(String(64), index=True, nullable=True) # Tenant/User Isolation
     title = Column(String(255))
+    notebook_id = Column(String(255), nullable=True)
     notebook_name = Column(String(255), index=True)
+    section_id = Column(String(255), nullable=True)
     section_name = Column(String(255), index=True)
     page_title = Column(String(255))
     page_id = Column(String(255), nullable=True)
@@ -49,7 +51,8 @@ class DesignRecord(Base):
     resource_url = Column(Text, nullable=True) # Binary attachment download URL from Microsoft Graph
     object_client_url = Column(Text, nullable=True) # Object-level desktop hyperlink
     object_web_url = Column(Text, nullable=True) # Object-level web hyperlink
-    onenote_web_url = Column(Text, nullable=True) # Fallback page web URL
+    page_web_url = Column(Text, nullable=True) # Page-level web hyperlink (primary exact-match navigation)
+    onenote_web_url = Column(Text, nullable=True) # Page web URL
     onenote_client_url = Column(Text, nullable=True) # Fallback page client URL
     image_url = Column(String(512))
     structural_preview_url = Column(String(512), nullable=True)
@@ -80,6 +83,7 @@ class SearchHistoryRecord(Base):
     top_match_object_id = Column(String(255), nullable=True)
     top_match_object_url = Column(Text, nullable=True)
     top_match_order = Column(Integer, nullable=True)
+    top_match_page_web_url = Column(Text, nullable=True)
     onenote_web_url = Column(Text, nullable=True)
 
 class SettingsRecord(Base):
@@ -103,6 +107,10 @@ def _migrate_sqlite_columns():
         design_cols = [row[1] for row in cursor.fetchall()]
         if "user_id" not in design_cols:
             cursor.execute("ALTER TABLE designs ADD COLUMN user_id VARCHAR(64)")
+        if "notebook_id" not in design_cols:
+            cursor.execute("ALTER TABLE designs ADD COLUMN notebook_id VARCHAR(255)")
+        if "section_id" not in design_cols:
+            cursor.execute("ALTER TABLE designs ADD COLUMN section_id VARCHAR(255)")
         if "page_id" not in design_cols:
             cursor.execute("ALTER TABLE designs ADD COLUMN page_id VARCHAR(255)")
         if "object_id" not in design_cols:
@@ -117,6 +125,8 @@ def _migrate_sqlite_columns():
             cursor.execute("ALTER TABLE designs ADD COLUMN object_client_url TEXT")
         if "object_web_url" not in design_cols:
             cursor.execute("ALTER TABLE designs ADD COLUMN object_web_url TEXT")
+        if "page_web_url" not in design_cols:
+            cursor.execute("ALTER TABLE designs ADD COLUMN page_web_url TEXT")
             
         # Check search_history table columns
         cursor.execute("PRAGMA table_info(search_history)")
@@ -129,6 +139,8 @@ def _migrate_sqlite_columns():
             cursor.execute("ALTER TABLE search_history ADD COLUMN top_match_object_id VARCHAR(255)")
         if "top_match_object_url" not in history_cols:
             cursor.execute("ALTER TABLE search_history ADD COLUMN top_match_object_url TEXT")
+        if "top_match_page_web_url" not in history_cols:
+            cursor.execute("ALTER TABLE search_history ADD COLUMN top_match_page_web_url TEXT")
         if "top_match_order" not in history_cols:
             cursor.execute("ALTER TABLE search_history ADD COLUMN top_match_order INTEGER")
 

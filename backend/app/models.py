@@ -2,11 +2,14 @@ from pydantic import BaseModel, Field
 from typing import List, Optional, Dict, Any
 
 class SareeDesignBase(BaseModel):
+    image_id: Optional[str] = None
     title: str
+    notebook_id: Optional[str] = None
     notebook_name: str
+    section_id: Optional[str] = None
     section_name: str
-    page_title: str
     page_id: Optional[str] = None
+    page_title: str
     object_id: Optional[str] = None
     image_order: Optional[int] = 1
     image_position: Optional[str] = "Position #1 on page"
@@ -14,8 +17,11 @@ class SareeDesignBase(BaseModel):
     resource_url: Optional[str] = None
     object_client_url: Optional[str] = None
     object_web_url: Optional[str] = None
+    page_web_url: Optional[str] = None
     onenote_web_url: Optional[str] = None
     onenote_client_url: Optional[str] = None
+    oneNoteWebUrl: Optional[str] = None
+    oneNoteClientUrl: Optional[str] = None
     category: Optional[str] = "Traditional"
     colorway: Optional[str] = None
     motifs: Optional[List[str]] = []

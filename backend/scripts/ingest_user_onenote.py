@@ -54,7 +54,7 @@ def ingest_local_onenote_section(one_file_path: str, user_id: str, nb_name: str,
                     cv2.imwrite(struct_path, structural_map)
 
                     web_url = f"https://onedrive.live.com/redir.aspx?cid={user_id.upper()}&page=edit&resid={user_id.upper()}!1012&wd=target%28{sec_name}.one%7C{page_title}%29"
-                    client_url = f"onenote:https://d.docs.live.net/{user_id.lower()}/OneNote%20Notebooks/{nb_name}/{sec_name}.one#{page_title}"
+                    client_url = None
 
                     item_meta = {
                         "id": design_id,

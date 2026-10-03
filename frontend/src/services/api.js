@@ -41,45 +41,97 @@ const getHeaders = (extra = {}) => {
   return headers;
 };
 
-export const getCleanOneNoteUrl = (itemOrUrl, designId = null) => {
-  const id = (typeof itemOrUrl === 'object' && itemOrUrl) 
-    ? (itemOrUrl.id || itemOrUrl.design_id || itemOrUrl.top_match_id) 
-    : designId;
+export const isPageSpecificOneNoteUrl = (url) => {
+  if (!url || typeof url !== 'string' || !url.startsWith('https://')) {
+    return false;
+  }
+  const lower = url.toLowerCase();
+  // Check for specific OneNote page URL markers (wd=target, resid=, page=, pageid=)
+  return lower.includes('wd=target') || lower.includes('resid=') || lower.includes('page=') || lower.includes('pageid=');
+};
 
-  if (id) {
-    return `/api/designs/${id}/open-onenote?mode=desktop`;
+export const getExactPageWebUrl = (item) => {
+  if (!item) return '';
+  let url = '';
+
+  if (typeof item === 'string') {
+    url = item.trim();
+  } else if (typeof item === 'object') {
+    // 1. Primary: exact stored page_web_url directly from Microsoft Graph links.oneNoteWebUrl.href
+    if (item.page_web_url && typeof item.page_web_url === 'string') {
+      url = item.page_web_url.trim();
+    }
+    // 2. Exact oneNoteWebUrl
+    else if (item.oneNoteWebUrl && typeof item.oneNoteWebUrl === 'string') {
+      url = item.oneNoteWebUrl.trim();
+    }
+    // 3. Fallback onenote_web_url
+    else if (item.onenote_web_url && typeof item.onenote_web_url === 'string') {
+      url = item.onenote_web_url.trim();
+    }
+    // 4. Fallback search history top_match_page_web_url
+    else if (item.top_match_page_web_url && typeof item.top_match_page_web_url === 'string') {
+      url = item.top_match_page_web_url.trim();
+    }
+    // 5. Fallback web_url
+    else if (item.web_url && typeof item.web_url === 'string') {
+      url = item.web_url.trim();
+    }
   }
-  if (typeof itemOrUrl === 'object' && itemOrUrl && itemOrUrl.onenote_client_url) {
-    return itemOrUrl.onenote_client_url;
+
+  if (!url || !url.startsWith('https://')) {
+    console.warn('[OneNote Navigation] No valid HTTPS page URL found:', item);
+    return '';
   }
-  return 'onenote:';
+
+  // Reject onenote: desktop protocol
+  if (url.toLowerCase().startsWith('onenote:')) {
+    console.warn('[OneNote Navigation] Rejecting onenote: protocol URL:', url);
+    return '';
+  }
+
+  // Reject generic homepage / notebook list fallbacks
+  const lower = url.toLowerCase();
+  if (
+    lower === 'https://onenote.com' ||
+    lower === 'https://onenote.com/' ||
+    lower === 'https://www.onenote.com' ||
+    lower === 'https://www.onenote.com/' ||
+    lower.startsWith('https://www.onenote.com/notebooks') ||
+    lower === 'https://onedrive.live.com' ||
+    lower === 'https://onedrive.live.com/'
+  ) {
+    console.warn('[OneNote Navigation] Rejecting generic homepage URL:', url);
+    return '';
+  }
+
+  return url;
+};
+
+// Backward-compatible aliases: all strictly resolve to the exact page-level HTTPS URL
+export const getExactObjectWebUrl = (item) => {
+  return getExactPageWebUrl(item);
+};
+
+export const getCleanOneNoteUrl = (itemOrUrl, designId = null) => {
+  return getExactPageWebUrl(itemOrUrl);
 };
 
 export const getCleanOneNoteWebUrl = (itemOrUrl, designId = null) => {
-  if (typeof itemOrUrl === 'object' && itemOrUrl) {
-    if (itemOrUrl.object_web_url) {
-      return itemOrUrl.object_web_url;
-    }
-    if (itemOrUrl.onenote_web_url) {
-      return itemOrUrl.onenote_web_url;
-    }
-  }
-  const id = (typeof itemOrUrl === 'object' && itemOrUrl) 
-    ? (itemOrUrl.id || itemOrUrl.design_id || itemOrUrl.top_match_id) 
-    : designId;
+  return getExactPageWebUrl(itemOrUrl);
+};
 
-  if (id) {
-    return `/api/designs/${id}/open-onenote?mode=web`;
-  }
-  return 'https://www.onenote.com';
+export const isValidOneNoteDeepLink = (url) => {
+  if (!url || typeof url !== 'string' || !url.startsWith('onenote:')) return false;
+  return url.includes('section-id=') && url.includes('page-id=') && url.includes('object-id=');
 };
 
 export const getCleanOneNoteClientUrl = (itemOrUrl, designId = null) => {
   if (typeof itemOrUrl === 'object' && itemOrUrl) {
-    if (itemOrUrl.object_client_url && itemOrUrl.object_client_url.startsWith('onenote:')) {
+    if (isValidOneNoteDeepLink(itemOrUrl.object_client_url)) {
       return itemOrUrl.object_client_url;
     }
-    if (itemOrUrl.onenote_client_url && itemOrUrl.onenote_client_url.startsWith('onenote:')) {
+    if (isValidOneNoteDeepLink(itemOrUrl.onenote_client_url)) {
       return itemOrUrl.onenote_client_url;
     }
     const id = itemOrUrl.id || itemOrUrl.design_id || itemOrUrl.top_match_id || designId;
@@ -87,13 +139,13 @@ export const getCleanOneNoteClientUrl = (itemOrUrl, designId = null) => {
       return `/api/designs/${id}/open-onenote?mode=desktop`;
     }
   }
-  if (typeof itemOrUrl === 'string' && itemOrUrl.startsWith('onenote:')) {
+  if (typeof itemOrUrl === 'string' && isValidOneNoteDeepLink(itemOrUrl)) {
     return itemOrUrl;
   }
   if (designId) {
     return `/api/designs/${designId}/open-onenote?mode=desktop`;
   }
-  return 'onenote:';
+  return null;
 };
 
 export const api = {
@@ -117,14 +169,22 @@ export const api = {
 
   // OneNote & Data Sources Status
   getOneNoteStatus: async () => {
-    const res = await fetch(`${API_BASE}/data-sources/onenote/status`, {
-      headers: getHeaders(),
-    });
-    const data = await res.json();
-    if (data && data.user_id && !getCurrentUserId()) {
-      setCurrentUserId(data.user_id);
+    try {
+      const res = await fetch(`${API_BASE}/data-sources/onenote/status`, {
+        headers: getHeaders(),
+      });
+      if (!res.ok) {
+        return null;
+      }
+      const data = await res.json();
+      if (data && data.user_id && !getCurrentUserId()) {
+        setCurrentUserId(data.user_id);
+      }
+      return data;
+    } catch (e) {
+      console.warn('OneNote status fetch warning:', e);
+      return null;
     }
-    return data;
   },
 
   getOneNoteAuthUrl: async () => {
