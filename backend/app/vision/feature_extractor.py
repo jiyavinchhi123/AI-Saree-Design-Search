@@ -30,17 +30,14 @@ class ColorInvariantFeatureExtractor:
         else:
             self.device = torch.device(device)
 
+        torch.set_grad_enabled(False)
         if self.device.type == "cpu":
-            # Optimize CPU threads for inference
             try:
-                torch.set_num_threads(8)
+                torch.set_num_threads(1)
             except Exception:
                 pass
 
-        # Load DINOv2 Small Vision Transformer backbone (384 embedding dims, 14x14 patch size)
-        self.model = torch.hub.load('facebookresearch/dinov2', 'dinov2_vits14')
-        self.model.to(self.device)
-        self.model.eval()
+        self._model = None
 
         # ImageNet normalization for DINOv2
         self.normalize = transforms.Normalize(
@@ -48,9 +45,27 @@ class ColorInvariantFeatureExtractor:
             std=[0.229, 0.224, 0.225]
         )
         self.to_tensor = transforms.ToTensor()
-
         # CLAHE for luminance contrast normalization (eliminates shadows and colorcast)
         self.clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+
+    @property
+    def model(self):
+        """Lazy load DINOv2 model on first search request to prevent boot-time OOM on low-memory servers"""
+        if self._model is None:
+            import gc
+            torch.set_grad_enabled(False)
+            if self.device.type == "cpu":
+                try:
+                    torch.set_num_threads(1)
+                except Exception:
+                    pass
+            print("[AI Saree Search] Initializing DINOv2 vision model on demand...")
+            self._model = torch.hub.load('facebookresearch/dinov2', 'dinov2_vits14')
+            self._model.to(self.device)
+            self._model.eval()
+            gc.collect()
+            print("[AI Saree Search] DINOv2 vision model loaded successfully.")
+        return self._model
 
     def preprocess_to_structural_tensor(self, image_np: np.ndarray) -> np.ndarray:
         """
