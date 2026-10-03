@@ -277,6 +277,24 @@ export const api = {
     return data;
   },
 
+  // Exchange Auth Code or Redirect URL directly
+  exchangeAuthCode: async (codeOrUrl) => {
+    const res = await fetch(`${API_BASE}/data-sources/onenote/auth/exchange-code`, {
+      method: 'POST',
+      headers: getHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ code: codeOrUrl }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || 'Code exchange failed or code has expired');
+    }
+    const data = await res.json();
+    if (data.status === 'success' && data.user && data.user.id) {
+      setCurrentUserId(data.user.id);
+    }
+    return data;
+  },
+
   // Designs Catalog
   getDesigns: async (params = {}) => {
     const query = new URLSearchParams(params).toString();

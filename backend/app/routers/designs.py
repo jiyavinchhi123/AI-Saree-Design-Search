@@ -454,7 +454,7 @@ def render_onenote_page_viewer(design: dict, display_title: str, sec_name: str, 
             <button class="btn-action" onclick="copyLocation()" id="btn-copy" title="Copy OneNote hierarchy location">
                 📋 Copy Location
             </button>
-            <a class="btn-action" href="http://localhost:5173/search">
+            <a class="btn-action" href="/search" onclick="if(window.history.length > 1) { window.history.back(); return false; }">
                 🔍 Back to Search
             </a>
         </div>

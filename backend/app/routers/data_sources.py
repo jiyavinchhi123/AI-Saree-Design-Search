@@ -325,7 +325,7 @@ async def auth_callback(code: str = None, error: str = None, redirect_uri: str =
             <div class="progress-fill"></div>
         </div>
 
-        <a href="http://localhost:5173/data-sources?user_id={user_id}" class="btn-continue">
+        <a id="open-link" href="https://ai-saree-design-search.vercel.app/data-sources?user_id={user_id}" class="btn-continue">
             Open Workspace &rarr;
         </a>
     </div>
@@ -337,13 +337,52 @@ async def auth_callback(code: str = None, error: str = None, redirect_uri: str =
             window.opener.postMessage({{ type: 'ONENOTE_AUTH_SUCCESS', userId: '{user_id}' }}, '*');
             setTimeout(() => window.close(), 1200);
         }} else {{
-            setTimeout(() => {{ window.location.href = 'http://localhost:5173/data-sources?user_id={user_id}'; }}, 1200);
+            const baseUrl = window.location.origin.includes('localhost') 
+                ? 'http://localhost:5173' 
+                : 'https://ai-saree-design-search.vercel.app';
+            setTimeout(() => {{ window.location.href = baseUrl + '/data-sources?user_id={user_id}'; }}, 1200);
         }}
     </script>
 </body>
 </html>
 """
     return HTMLResponse(content=html_content)
+
+@router.post("/onenote/auth/exchange-code")
+async def exchange_auth_code(
+    payload: dict = Body(...),
+    db: Session = Depends(get_db)
+):
+    """
+    Exchanges an OAuth code or full redirect URL for tokens.
+    Handles codes from redirects like http://localhost/?code=...
+    """
+    from app.main import onenote_client
+    raw_code = payload.get("code", "").strip()
+    if not raw_code:
+        raise HTTPException(status_code=400, detail="Missing authorization code or URL")
+
+    # If the user pasted the entire redirect URL, extract the code parameter
+    import urllib.parse
+    if "code=" in raw_code or "?" in raw_code:
+        try:
+            parsed = urllib.parse.urlparse(raw_code)
+            qs = urllib.parse.parse_qs(parsed.query)
+            if "code" in qs:
+                raw_code = qs["code"][0]
+        except Exception:
+            pass
+
+    result = await onenote_client.exchange_code_for_token(raw_code, redirect_uri="http://localhost", db=db)
+    if not result.get("success"):
+        raise HTTPException(status_code=400, detail=result.get("error", "Code exchange failed or code expired"))
+
+    user_info = result.get("user", {})
+    return {
+        "status": "success",
+        "message": f"Successfully connected as {user_info.get('displayName')}!",
+        "user": user_info
+    }
 
 @router.get("/onenote/device-flow/start")
 async def start_device_login():

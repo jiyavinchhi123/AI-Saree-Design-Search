@@ -42,6 +42,9 @@ export default function DataSources() {
     copied: false
   });
   const pollingRef = useRef(null);
+  const [manualCode, setManualCode] = useState('');
+  const [isSubmittingCode, setIsSubmittingCode] = useState(false);
+  const [showManualInput, setShowManualInput] = useState(false);
 
   // Catalog Table State
   const [designs, setDesigns] = useState([]);
@@ -138,6 +141,27 @@ export default function DataSources() {
       }, 4000);
     } catch (err) {
       setNotification({ type: 'error', message: err.message || 'Device login failed' });
+    }
+  };
+
+  const handleExchangeManualCode = async (e) => {
+    if (e) e.preventDefault();
+    if (!manualCode.trim()) return;
+    setIsSubmittingCode(true);
+    try {
+      setNotification({ type: 'info', message: 'Verifying Microsoft authorization code...' });
+      const res = await api.exchangeAuthCode(manualCode.trim());
+      if (res.status === 'success') {
+        closeDeviceLoginModal();
+        setManualCode('');
+        setShowManualInput(false);
+        setNotification({ type: 'success', message: 'Connected successfully to Microsoft OneNote!' });
+        loadData();
+      }
+    } catch (err) {
+      setNotification({ type: 'error', message: err.message || 'Authorization code invalid or expired' });
+    } finally {
+      setIsSubmittingCode(false);
     }
   };
 
@@ -361,17 +385,10 @@ export default function DataSources() {
                 <button 
                   id="btn-connect-onenote"
                   className="btn-primary" 
-                  onClick={handleDirectOAuthLogin}
+                  onClick={handleStartDeviceLogin}
                   style={{ flex: 1, minWidth: '180px' }}
                 >
                   <BookOpen size={16} /> Connect OneNote
-                </button>
-                <button 
-                  id="btn-device-login"
-                  className="btn-secondary" 
-                  onClick={handleStartDeviceLogin}
-                >
-                  <KeyRound size={15} /> Device Code
                 </button>
               </div>
             </div>
@@ -641,10 +658,10 @@ export default function DataSources() {
             </div>
 
             <h3 style={{ fontSize: '1.35rem', color: 'var(--text-main)', marginBottom: '8px' }}>
-              Microsoft Device Login
+              Connect Microsoft OneNote
             </h3>
-            <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '22px' }}>
-              Enter the code below on the Microsoft Device Login page to connect your OneNote account:
+            <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '18px', lineHeight: '1.5' }}>
+              Enter this 9-character code on the Microsoft Device Login page to link your OneNote account:
             </p>
 
             <div style={{
@@ -652,7 +669,7 @@ export default function DataSources() {
               border: '2px dashed var(--purple-border)',
               borderRadius: 'var(--radius-lg)',
               padding: '18px',
-              marginBottom: '20px'
+              marginBottom: '16px'
             }}>
               <div style={{ fontSize: '1.9rem', fontWeight: 800, letterSpacing: '0.15em', color: 'var(--primary-purple)', fontFamily: 'monospace' }}>
                 {deviceLogin.userCode}
@@ -681,6 +698,24 @@ export default function DataSources() {
               </button>
             </div>
 
+            <div style={{
+              background: 'var(--purple-light)',
+              borderRadius: 'var(--radius-md)',
+              padding: '12px 16px',
+              textAlign: 'left',
+              fontSize: '0.80rem',
+              color: 'var(--text-secondary)',
+              marginBottom: '18px',
+              lineHeight: '1.5'
+            }}>
+              <strong style={{ color: 'var(--primary-purple)' }}>Quick 3-step setup:</strong>
+              <ol style={{ paddingLeft: '18px', marginTop: '4px' }}>
+                <li>Copy the 9-letter code above</li>
+                <li>Click <strong>Open Microsoft Login Page</strong> below</li>
+                <li>Paste code & sign in — this window connects automatically!</li>
+              </ol>
+            </div>
+
             <a 
               href={deviceLogin.verificationUri} 
               target="_blank" 
@@ -694,6 +729,54 @@ export default function DataSources() {
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', fontSize: '0.80rem', color: 'var(--text-muted)' }}>
               <RefreshCw size={14} className="spinner" />
               <span>Waiting for approval on Microsoft...</span>
+            </div>
+
+            {/* Localhost redirect fallback */}
+            <div style={{ marginTop: '20px', borderTop: '1px solid var(--border-subtle)', paddingTop: '14px', textAlign: 'left' }}>
+              <button 
+                type="button"
+                onClick={() => setShowManualInput(!showManualInput)}
+                style={{ 
+                  background: 'none', 
+                  border: 'none', 
+                  color: 'var(--primary-purple)', 
+                  fontSize: '0.76rem', 
+                  cursor: 'pointer',
+                  fontWeight: 600,
+                  padding: 0,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '4px'
+                }}
+              >
+                <span>{showManualInput ? '▼ Hide manual code input' : '▶ Redirected to localhost with a code? Paste here'}</span>
+              </button>
+
+              {showManualInput && (
+                <form onSubmit={handleExchangeManualCode} style={{ marginTop: '10px', display: 'flex', gap: '8px' }}>
+                  <input
+                    type="text"
+                    value={manualCode}
+                    onChange={(e) => setManualCode(e.target.value)}
+                    placeholder="Paste http://localhost/?code=... or authorization code"
+                    style={{
+                      flex: 1,
+                      padding: '7px 10px',
+                      borderRadius: 'var(--radius-sm)',
+                      border: '1px solid var(--border-subtle)',
+                      fontSize: '0.78rem'
+                    }}
+                  />
+                  <button
+                    type="submit"
+                    className="btn-primary"
+                    disabled={isSubmittingCode || !manualCode.trim()}
+                    style={{ padding: '7px 12px', fontSize: '0.76rem' }}
+                  >
+                    {isSubmittingCode ? 'Connecting...' : 'Connect'}
+                  </button>
+                </form>
+              )}
             </div>
           </div>
         </div>
