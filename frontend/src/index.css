@@ -92,11 +92,18 @@ html, body {
   font-family: var(--font-body);
   background-color: var(--bg-main);
   color: var(--text-main);
-  min-height: 100vh;
+  height: 100%;
+  margin: 0;
+  padding: 0;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   line-height: 1.5;
-  overflow-x: hidden;
+  overflow: hidden;
+}
+
+#root {
+  height: 100%;
+  width: 100%;
 }
 
 /* Subtle Indian Textile Jacquard Watermark Background */
@@ -154,7 +161,9 @@ input, select, textarea {
    ========================================================================== */
 .app-container {
   display: flex;
-  min-height: 100vh;
+  height: 100vh;
+  width: 100vw;
+  overflow: hidden;
   position: relative;
   z-index: 1;
 }
@@ -164,12 +173,15 @@ input, select, textarea {
   flex: 1;
   display: flex;
   flex-direction: column;
+  height: 100vh;
+  overflow-y: auto;
+  overflow-x: hidden;
   min-width: 0;
   background-color: var(--bg-main);
 }
 
 .page-container {
-  padding: 32px 40px 60px 40px;
+  padding: 28px 36px 48px 36px;
   max-width: 1400px;
   width: 100%;
   margin: 0 auto;
@@ -197,8 +209,7 @@ input, select, textarea {
   display: flex;
   flex-direction: column;
   height: 100vh;
-  position: sticky;
-  top: 0;
+  flex-shrink: 0;
   z-index: 100;
   transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   box-shadow: 2px 0 12px rgba(15, 23, 42, 0.02);
@@ -577,11 +588,11 @@ input, select, textarea {
   background: linear-gradient(135deg, #ffffff 0%, #faf8ff 50%, #fffdf5 100%);
   border: 1px solid var(--purple-border);
   border-radius: var(--radius-2xl);
-  padding: 40px;
+  padding: 30px 36px;
   position: relative;
   overflow: hidden;
   box-shadow: var(--shadow-md);
-  margin-bottom: 32px;
+  margin-bottom: 26px;
 }
 
 .hero-card::after {
@@ -602,39 +613,39 @@ input, select, textarea {
   background: var(--purple-light);
   border: 1px solid var(--purple-border);
   border-radius: var(--radius-full);
-  padding: 6px 14px;
-  font-size: 0.78rem;
+  padding: 5px 12px;
+  font-size: 0.74rem;
   font-weight: 700;
   color: var(--primary-purple);
-  margin-bottom: 16px;
+  margin-bottom: 12px;
   text-transform: uppercase;
   letter-spacing: 0.04em;
 }
 
 .hero-title {
-  font-size: 2.2rem;
+  font-size: 1.85rem;
   font-weight: 800;
   color: var(--text-main);
   letter-spacing: -0.03em;
   line-height: 1.15;
-  margin-bottom: 10px;
+  margin-bottom: 8px;
 }
 
 .hero-tagline {
   font-family: var(--font-accent);
-  font-size: 1.25rem;
+  font-size: 1.1rem;
   font-weight: 700;
   color: var(--gold-primary);
-  letter-spacing: 0.06em;
-  margin-bottom: 14px;
+  letter-spacing: 0.05em;
+  margin-bottom: 12px;
 }
 
 .hero-desc {
-  font-size: 0.96rem;
+  font-size: 0.90rem;
   color: var(--text-secondary);
-  line-height: 1.6;
-  max-width: 680px;
-  margin-bottom: 26px;
+  line-height: 1.55;
+  max-width: 720px;
+  margin-bottom: 20px;
 }
 
 @media (max-width: 640px) {
@@ -694,7 +705,7 @@ input, select, textarea {
   background: #ffffff;
   border: 1px solid var(--border-card);
   border-radius: var(--radius-lg);
-  padding: 20px;
+  padding: 18px 16px;
   position: relative;
   box-shadow: var(--shadow-xs);
   transition: all 0.2s ease;
@@ -709,33 +720,33 @@ input, select, textarea {
 }
 
 .step-num-badge {
-  width: 28px;
-  height: 28px;
+  width: 26px;
+  height: 26px;
   border-radius: var(--radius-full);
   background: var(--purple-light);
   color: var(--primary-purple);
-  font-size: 0.76rem;
+  font-size: 0.72rem;
   font-weight: 800;
   display: flex;
   align-items: center;
   justify-content: center;
-  margin-bottom: 12px;
+  margin-bottom: 10px;
 }
 
 .step-icon-wrap {
-  width: 44px;
-  height: 44px;
+  width: 40px;
+  height: 40px;
   border-radius: var(--radius-md);
   background: var(--purple-light);
   color: var(--primary-purple);
   display: flex;
   align-items: center;
   justify-content: center;
-  margin-bottom: 14px;
+  margin-bottom: 12px;
 }
 
 .step-card-title {
-  font-size: 0.94rem;
+  font-size: 0.92rem;
   font-weight: 700;
   color: var(--text-main);
   margin-bottom: 6px;
@@ -744,7 +755,8 @@ input, select, textarea {
 .step-card-desc {
   font-size: 0.78rem;
   color: var(--text-muted);
-  line-height: 1.5;
+  line-height: 1.45;
+  flex: 1;
 }
 
 /* ==========================================================================
@@ -1288,3 +1300,27 @@ input, select, textarea {
 .pulse-glow {
   animation: pulseGlow 2s ease-in-out infinite;
 }
+
+/* ==========================================================================
+   APP FOOTER
+   ========================================================================== */
+.app-footer {
+  margin-top: auto;
+  padding: 16px 24px;
+  border-top: 1px solid var(--border-subtle);
+  background: #ffffff;
+  text-align: center;
+}
+
+.app-footer-text {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  letter-spacing: 0.01em;
+}
+
+.app-footer-text strong {
+  color: var(--text-main);
+  font-weight: 700;
+}
+

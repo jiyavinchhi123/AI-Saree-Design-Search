@@ -102,7 +102,14 @@ export default function App() {
           mobileNavOpen={mobileNavOpen}
           setMobileNavOpen={setMobileNavOpen}
         />
-        <main>{renderActivePage()}</main>
+        <main style={{ flex: 1 }}>{renderActivePage()}</main>
+        
+        {/* App Footer */}
+        <footer className="app-footer" id="app-footer">
+          <p className="app-footer-text">
+            &copy; 2026 AI Saree Search | Developed by <strong>Jiya Vinchhi</strong>
+          </p>
+        </footer>
       </div>
     </div>
   );

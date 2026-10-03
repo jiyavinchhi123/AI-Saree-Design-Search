@@ -96,57 +96,253 @@ async def auth_callback(code: str = None, error: str = None, redirect_uri: str =
 
     user_info = result.get("user", {})
     user_id = user_info.get("id", "")
+    user_display = user_info.get("displayName") or "Microsoft User"
+    user_email_display = user_info.get("email") or user_info.get("userPrincipalName") or ""
+    user_initial = (user_display[0] if user_display else "U").upper()
 
-    html_content = f"""
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <title>OneNote Connected - AI Saree Design Search</title>
-        <style>
-            body {{
-                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-                background: #0d0f17;
-                color: #f1f5f9;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                height: 100vh;
-                margin: 0;
-            }}
-            .card {{
-                background: #171b26;
-                border: 1px solid rgba(212, 175, 55, 0.3);
-                padding: 40px;
-                border-radius: 12px;
-                text-align: center;
-                box-shadow: 0 10px 25px rgba(0,0,0,0.5);
-                max-width: 440px;
-            }}
-            h2 {{ color: #d4af37; margin-bottom: 12px; }}
-            p {{ color: #94a3b8; font-size: 15px; line-height: 1.6; }}
-            a {{ color: #d4af37; text-decoration: none; font-weight: bold; }}
-        </style>
-    </head>
-    <body>
-        <div class="card">
-            <h2>Authentication Successful!</h2>
-            <p>Connected as <strong>{user_info.get("displayName", "User")}</strong> ({user_info.get("email", "")})</p>
-            <p>Redirecting to your saree workspace...</p>
+    html_content = f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OneNote Connected - AI Saree Design Search</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        :root {{
+            --primary: #6d28d9;
+            --primary-light: #f5f3ff;
+            --emerald: #059669;
+            --emerald-light: #ecfdf5;
+            --text-main: #0f172a;
+            --text-secondary: #475569;
+            --text-muted: #94a3b8;
+            --border-subtle: #e2e8f0;
+        }}
+        * {{
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }}
+        body {{
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background-color: #f8fafc;
+            background-image: 
+                radial-gradient(at 0% 0%, rgba(245, 243, 255, 0.9) 0px, transparent 50%),
+                radial-gradient(at 100% 0%, rgba(254, 243, 199, 0.5) 0px, transparent 50%),
+                radial-gradient(at 100% 100%, rgba(245, 243, 255, 0.8) 0px, transparent 50%);
+            color: var(--text-main);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            padding: 20px;
+            -webkit-font-smoothing: antialiased;
+        }}
+        .card {{
+            background: #ffffff;
+            border: 1px solid rgba(226, 232, 240, 0.9);
+            padding: 44px 36px 36px 36px;
+            border-radius: 24px;
+            text-align: center;
+            box-shadow: 
+                0 25px 50px -12px rgba(109, 40, 217, 0.12),
+                0 4px 12px rgba(0, 0, 0, 0.03);
+            max-width: 460px;
+            width: 100%;
+            position: relative;
+            overflow: hidden;
+        }}
+        .card::before {{
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 4px;
+            background: linear-gradient(90deg, #6d28d9, #10b981, #d97706);
+        }}
+        .icon-wrap {{
+            width: 68px;
+            height: 68px;
+            border-radius: 50%;
+            background: var(--emerald-light);
+            border: 2px solid #a7f3d0;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 20px;
+            box-shadow: 0 0 20px rgba(16, 185, 129, 0.15);
+            animation: popIn 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }}
+        @keyframes popIn {{
+            0% {{ transform: scale(0.6); opacity: 0; }}
+            100% {{ transform: scale(1); opacity: 1; }}
+        }}
+        .icon-wrap svg {{
+            stroke: var(--emerald);
+            width: 34px;
+            height: 34px;
+        }}
+        h2 {{
+            font-size: 1.55rem;
+            font-weight: 800;
+            color: var(--text-main);
+            margin-bottom: 8px;
+            letter-spacing: -0.02em;
+        }}
+        .badge {{
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            background: var(--primary-light);
+            color: var(--primary);
+            border: 1px solid #ddd6fe;
+            padding: 4px 12px;
+            border-radius: 9999px;
+            font-size: 0.76rem;
+            font-weight: 700;
+            margin-bottom: 20px;
+            letter-spacing: 0.02em;
+        }}
+        .user-profile {{
+            background: #f8fafc;
+            border: 1px solid var(--border-subtle);
+            border-radius: 14px;
+            padding: 14px 16px;
+            margin-bottom: 24px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            text-align: left;
+        }}
+        .avatar {{
+            width: 42px;
+            height: 42px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #6d28d9, #431407);
+            color: #ffffff;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 800;
+            font-size: 1.05rem;
+            flex-shrink: 0;
+        }}
+        .user-name {{
+            font-size: 0.92rem;
+            font-weight: 700;
+            color: var(--text-main);
+        }}
+        .user-email {{
+            font-size: 0.78rem;
+            color: var(--text-muted);
+            margin-top: 2px;
+            word-break: break-all;
+        }}
+        .status-text {{
+            font-size: 0.86rem;
+            color: var(--text-secondary);
+            margin-bottom: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }}
+        .spinner {{
+            width: 14px;
+            height: 14px;
+            border: 2px solid #cbd5e1;
+            border-top-color: var(--primary);
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }}
+        @keyframes spin {{
+            to {{ transform: rotate(360deg); }}
+        }}
+        .progress-track {{
+            width: 100%;
+            height: 5px;
+            background: #f1f5f9;
+            border-radius: 9999px;
+            overflow: hidden;
+            margin-bottom: 20px;
+        }}
+        .progress-fill {{
+            height: 100%;
+            width: 0%;
+            background: linear-gradient(90deg, #6d28d9, #10b981);
+            border-radius: 9999px;
+            animation: fillProgress 1.2s ease-in-out forwards;
+        }}
+        @keyframes fillProgress {{
+            0% {{ width: 0%; }}
+            100% {{ width: 100%; }}
+        }}
+        .btn-continue {{
+            display: inline-block;
+            background: var(--primary);
+            color: #ffffff;
+            padding: 10px 22px;
+            border-radius: 10px;
+            font-size: 0.86rem;
+            font-weight: 600;
+            text-decoration: none;
+            transition: all 0.2s ease;
+        }}
+        .btn-continue:hover {{
+            background: #5b21b6;
+            transform: translateY(-1px);
+        }}
+    </style>
+</head>
+<body>
+    <div class="card">
+        <div class="icon-wrap">
+            <svg viewBox="0 0 24 24" fill="none" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="20 6 9 17 4 12"></polyline>
+            </svg>
         </div>
-        <script>
-            try {{
-                localStorage.setItem('saree_current_user_id', '{user_id}');
-            }} catch(e) {{}}
-            if (window.opener) {{
-                window.opener.postMessage({{ type: 'ONENOTE_AUTH_SUCCESS', userId: '{user_id}' }}, '*');
-                setTimeout(() => window.close(), 1200);
-            }} else {{
-                setTimeout(() => {{ window.location.href = 'http://localhost:5173/data-sources?user_id={user_id}'; }}, 1200);
-            }}
-        </script>
-    </body>
-    </html>
-    """
+        <h2>Authentication Successful!</h2>
+        <div class="badge">
+            <span>&#10003; Microsoft OneNote Connected</span>
+        </div>
+
+        <div class="user-profile">
+            <div class="avatar">{user_initial}</div>
+            <div>
+                <div class="user-name">{user_display}</div>
+                <div class="user-email">{user_email_display}</div>
+            </div>
+        </div>
+
+        <div class="status-text">
+            <span class="spinner"></span>
+            <span>Redirecting to your saree workspace...</span>
+        </div>
+        <div class="progress-track">
+            <div class="progress-fill"></div>
+        </div>
+
+        <a href="http://localhost:5173/data-sources?user_id={user_id}" class="btn-continue">
+            Open Workspace &rarr;
+        </a>
+    </div>
+    <script>
+        try {{
+            localStorage.setItem('saree_current_user_id', '{user_id}');
+        }} catch(e) {{}}
+        if (window.opener) {{
+            window.opener.postMessage({{ type: 'ONENOTE_AUTH_SUCCESS', userId: '{user_id}' }}, '*');
+            setTimeout(() => window.close(), 1200);
+        }} else {{
+            setTimeout(() => {{ window.location.href = 'http://localhost:5173/data-sources?user_id={user_id}'; }}, 1200);
+        }}
+    </script>
+</body>
+</html>
+"""
     return HTMLResponse(content=html_content)
 
 @router.get("/onenote/device-flow/start")

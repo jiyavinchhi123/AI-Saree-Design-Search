@@ -30,8 +30,8 @@ export default function Sidebar({ activeTab, setActiveTab, mobileNavOpen, setMob
 
   const navItems = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
-    { id: 'search', label: 'Search Design', icon: Search },
     { id: 'data-sources', label: 'OneNote Integration', icon: BookOpen },
+    { id: 'search', label: 'Search Design', icon: Search },
     { id: 'history', label: 'Search History', icon: History },
   ];
 
