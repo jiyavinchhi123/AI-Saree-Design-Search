@@ -7,7 +7,7 @@ import numpy as np
 from datetime import datetime
 from typing import Optional, List
 from fastapi import APIRouter, Header, Depends, HTTPException, Query, Body
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy.orm import Session
 
 from app.models import OneNoteSyncStatus, NotebookSyncRequest
@@ -82,8 +82,17 @@ async def get_auth_url():
     return onenote_client.get_auth_url()
 
 @router.get("/onenote/auth/callback")
-async def auth_callback(code: str = None, error: str = None, redirect_uri: str = None, db: Session = Depends(get_db)):
-    """Handles OAuth redirect callback from Microsoft."""
+async def auth_callback(
+    code: str = None, 
+    error: str = None, 
+    redirect_uri: str = None, 
+    format: str = Query("redirect"), 
+    db: Session = Depends(get_db)
+):
+    """
+    Handles OAuth redirect callback from Microsoft.
+    Saves OneNote connection and automatically redirects to the Vercel production URL (or localhost in dev).
+    """
     from app.main import onenote_client
     if error:
         raise HTTPException(status_code=400, detail=f"Authentication error: {error}")
@@ -100,11 +109,22 @@ async def auth_callback(code: str = None, error: str = None, redirect_uri: str =
     user_email_display = user_info.get("email") or user_info.get("userPrincipalName") or ""
     user_initial = (user_display[0] if user_display else "U").upper()
 
+    # Determine production vs development frontend URL using FRONTEND_URL environment variable
+    is_dev = os.getenv("ENV", "").lower() in ("dev", "development") or os.getenv("ENVIRONMENT", "").lower() in ("dev", "development")
+    default_frontend = "http://localhost:5173" if is_dev else "https://ai-saree-design-search.vercel.app"
+    frontend_base = os.getenv("FRONTEND_URL", default_frontend).rstrip("/")
+    redirect_target = f"{frontend_base}/?user_id={user_id}&connected=true"
+
+    # Default to direct HTTP 302 redirect to Vercel production URL
+    if format != "html":
+        return RedirectResponse(url=redirect_target, status_code=302)
+
     html_content = f"""<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="refresh" content="0; url={redirect_target}">
     <title>OneNote Connected - AI Saree Design Search</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -325,7 +345,7 @@ async def auth_callback(code: str = None, error: str = None, redirect_uri: str =
             <div class="progress-fill"></div>
         </div>
 
-        <a id="open-link" href="https://ai-saree-design-search.vercel.app/data-sources?user_id={user_id}" class="btn-continue">
+        <a id="open-link" href="{redirect_target}" class="btn-continue">
             Open Workspace &rarr;
         </a>
     </div>
@@ -335,12 +355,9 @@ async def auth_callback(code: str = None, error: str = None, redirect_uri: str =
         }} catch(e) {{}}
         if (window.opener) {{
             window.opener.postMessage({{ type: 'ONENOTE_AUTH_SUCCESS', userId: '{user_id}' }}, '*');
-            setTimeout(() => window.close(), 1200);
+            setTimeout(() => window.close(), 600);
         }} else {{
-            const baseUrl = window.location.origin.includes('localhost') 
-                ? 'http://localhost:5173' 
-                : 'https://ai-saree-design-search.vercel.app';
-            setTimeout(() => {{ window.location.href = baseUrl + '/data-sources?user_id={user_id}'; }}, 1200);
+            window.location.replace('{redirect_target}');
         }}
     </script>
 </body>
@@ -373,7 +390,11 @@ async def exchange_auth_code(
         except Exception:
             pass
 
-    result = await onenote_client.exchange_code_for_token(raw_code, redirect_uri="http://localhost", db=db)
+    is_dev = os.getenv("ENV", "").lower() in ("dev", "development") or os.getenv("ENVIRONMENT", "").lower() in ("dev", "development")
+    default_redirect = "http://localhost" if is_dev else onenote_client.redirect_uri
+    redirect_uri = os.getenv("MS_REDIRECT_URI", default_redirect)
+
+    result = await onenote_client.exchange_code_for_token(raw_code, redirect_uri=redirect_uri, db=db)
     if not result.get("success"):
         raise HTTPException(status_code=400, detail=result.get("error", "Code exchange failed or code expired"))
 

@@ -385,20 +385,18 @@ export default function DataSources() {
                 <button 
                   id="btn-connect-onenote"
                   className="btn-primary" 
-                  onClick={handleStartDeviceLogin}
+                  onClick={handleDirectOAuthLogin}
                   style={{ flex: 1, minWidth: '180px' }}
                 >
                   <BookOpen size={16} /> Connect OneNote
                 </button>
-                {oneNoteStatus?.is_configured && (
-                  <button 
-                    id="btn-device-login"
-                    className="btn-secondary" 
-                    onClick={handleStartDeviceLogin}
-                  >
-                    <KeyRound size={15} /> Device Code
-                  </button>
-                )}
+                <button 
+                  id="btn-device-login"
+                  className="btn-secondary" 
+                  onClick={handleStartDeviceLogin}
+                >
+                  <KeyRound size={15} /> Device Code
+                </button>
               </div>
             </div>
           )}

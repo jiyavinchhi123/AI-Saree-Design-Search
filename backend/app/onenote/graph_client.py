@@ -34,10 +34,12 @@ class MicrosoftOneNoteClient:
         self.client_id = (client_id or os.getenv("MS_CLIENT_ID", "")).strip()
         self.client_secret = (client_secret or os.getenv("MS_CLIENT_SECRET", "")).strip()
         self.tenant_id = (tenant_id or os.getenv("MS_TENANT_ID", "common")).strip()
+        is_dev = os.getenv("ENV", "").lower() in ("dev", "development") or os.getenv("ENVIRONMENT", "").lower() in ("dev", "development")
+        default_redirect = "http://localhost" if is_dev else "https://ai-saree-design-search.onrender.com/api/data-sources/onenote/auth/callback"
         self.redirect_uri = (
             os.getenv("MS_REDIRECT_URI") 
             or redirect_uri 
-            or "https://ai-saree-design-search.onrender.com/api/data-sources/onenote/auth/callback"
+            or default_redirect
         ).strip()
         self.authority = f"https://login.microsoftonline.com/{self.tenant_id}"
 
@@ -57,7 +59,13 @@ class MicrosoftOneNoteClient:
         """Generates Microsoft OAuth2 login authorization URL."""
         cid = self.get_effective_client_id()
         is_custom = cid != DEFAULT_PUBLIC_CLIENT_ID
-        r_uri = self.redirect_uri if is_custom else "http://localhost"
+        is_dev = os.getenv("ENV", "").lower() in ("dev", "development") or os.getenv("ENVIRONMENT", "").lower() in ("dev", "development")
+        if os.getenv("MS_REDIRECT_URI"):
+            r_uri = os.getenv("MS_REDIRECT_URI").strip()
+        elif is_dev:
+            r_uri = "http://localhost"
+        else:
+            r_uri = self.redirect_uri
         msal_app = msal.ConfidentialClientApplication(
             cid,
             authority=self.authority,
@@ -184,7 +192,9 @@ class MicrosoftOneNoteClient:
         from app.database import UserRecord
 
         cid = self.get_effective_client_id()
-        r_uri = redirect_uri or ("http://localhost" if cid == DEFAULT_PUBLIC_CLIENT_ID else self.redirect_uri)
+        is_dev = os.getenv("ENV", "").lower() in ("dev", "development") or os.getenv("ENVIRONMENT", "").lower() in ("dev", "development")
+        default_r_uri = "http://localhost" if is_dev else self.redirect_uri
+        r_uri = redirect_uri or os.getenv("MS_REDIRECT_URI") or default_r_uri
 
         msal_app = msal.ConfidentialClientApplication(
             cid,
