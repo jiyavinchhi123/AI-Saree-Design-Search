@@ -39,6 +39,18 @@ async def lifespan(app: FastAPI):
         db.close()
 
     print(f"[AI Saree Search] Server started. Loaded {vector_index_mgr.count()} indexed OneNote designs.")
+
+    # Pre-warm DINOv2 vision model in background so search requests are instant
+    import asyncio
+    async def warmup_vision_engine():
+        try:
+            print("[AI Saree Search] Pre-warming DINOv2 vision model in background...")
+            await asyncio.to_thread(lambda: extractor.model)
+            print("[AI Saree Search] DINOv2 vision model ready for instant search.")
+        except Exception as e:
+            print(f"[AI Saree Search] Vision model warmup note: {e}")
+
+    asyncio.create_task(warmup_vision_engine())
     yield
 
 

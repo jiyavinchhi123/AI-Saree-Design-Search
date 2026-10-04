@@ -50,9 +50,16 @@ async def search_saree_design(
 
     # 3. Extract Color-Invariant Feature Vector & Structural Map
     try:
-        embedding, structural_map = extractor.extract_features_from_image(img_bgr)
+        import asyncio
+        embedding, structural_map = await asyncio.to_thread(extractor.extract_features_from_image, img_bgr)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to process image features: {str(e)}")
+        err_msg = str(e)
+        if "timeout" in err_msg.lower() or "connection" in err_msg.lower():
+            raise HTTPException(
+                status_code=503, 
+                detail="AI Vision Model is warming up on the cloud server. Please retry in a few seconds."
+            )
+        raise HTTPException(status_code=500, detail=f"Failed to process image features: {err_msg}")
 
     # Save structural tensor preview for user inspection
     struct_preview_filename = f"struct_query_{query_id}.jpg"
