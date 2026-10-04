@@ -385,7 +385,7 @@ export default function DataSources() {
                 <button 
                   id="btn-connect-onenote"
                   className="btn-primary" 
-                  onClick={oneNoteStatus?.is_configured ? handleDirectOAuthLogin : handleStartDeviceLogin}
+                  onClick={handleStartDeviceLogin}
                   style={{ flex: 1, minWidth: '180px' }}
                 >
                   <BookOpen size={16} /> Connect OneNote
