@@ -21,19 +21,26 @@ onenote_client = MicrosoftOneNoteClient()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    from app.database import SessionLocal
+    from app.database import SessionLocal, UserRecord
+    from app.seeder import run_auto_seed
     db = SessionLocal()
     try:
-        await onenote_client.load_tokens(db)
-        if onenote_client.is_connected:
-            print(f"[AI Saree Search] OneNote connected for: {onenote_client.user_profile.get('userPrincipalName') or onenote_client.user_profile.get('mail')}")
+        run_auto_seed(db)
+        user = db.query(UserRecord).order_by(UserRecord.connected_at.desc()).first()
+        if user:
+            token = await onenote_client.get_valid_token_for_user(user.id, db)
+            if token:
+                print(f"[AI Saree Search] OneNote connected for: {user.display_name} ({user.email})")
+            else:
+                print(f"[AI Saree Search] OneNote registered for: {user.display_name} ({user.email}), awaiting token refresh.")
     except Exception as e:
-        print(f"[AI Saree Search] OneNote token restore notice: {e}")
+        print(f"[AI Saree Search] Lifespan initialization notice: {e}")
     finally:
         db.close()
 
-    print(f"[AI Saree Search] Server started. Loaded {vector_index.count()} indexed OneNote designs.")
+    print(f"[AI Saree Search] Server started. Loaded {vector_index_mgr.count()} indexed OneNote designs.")
     yield
+
 
 app = FastAPI(
     title="AI Saree Design Search API",

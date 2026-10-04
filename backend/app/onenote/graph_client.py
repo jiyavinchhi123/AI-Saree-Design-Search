@@ -29,27 +29,35 @@ class MicrosoftOneNoteClient:
         client_id: Optional[str] = None,
         client_secret: Optional[str] = None,
         tenant_id: str = "common",
-        redirect_uri: str = "http://localhost:8000/api/data-sources/onenote/auth/callback"
+        redirect_uri: Optional[str] = None
     ):
-        self.client_id = client_id or os.getenv("MS_CLIENT_ID", "")
-        self.client_secret = client_secret or os.getenv("MS_CLIENT_SECRET", "")
-        self.tenant_id = tenant_id or os.getenv("MS_TENANT_ID", "common")
-        self.redirect_uri = redirect_uri
+        self.client_id = (client_id or os.getenv("MS_CLIENT_ID", "")).strip()
+        self.client_secret = (client_secret or os.getenv("MS_CLIENT_SECRET", "")).strip()
+        self.tenant_id = (tenant_id or os.getenv("MS_TENANT_ID", "common")).strip()
+        self.redirect_uri = (
+            os.getenv("MS_REDIRECT_URI") 
+            or redirect_uri 
+            or "https://ai-saree-design-search.onrender.com/api/data-sources/onenote/auth/callback"
+        ).strip()
         self.authority = f"https://login.microsoftonline.com/{self.tenant_id}"
 
         # In-memory dictionary of active device code flows keyed by session_id
         self._device_flows: Dict[str, Dict[str, Any]] = {}
 
     def is_configured(self) -> bool:
-        return True
+        return bool(self.client_id and self.client_id != DEFAULT_PUBLIC_CLIENT_ID)
+
+    def is_custom_app(self) -> bool:
+        return bool(self.client_id and self.client_id != DEFAULT_PUBLIC_CLIENT_ID)
 
     def get_effective_client_id(self) -> str:
-        return self.client_id.strip() if self.client_id and self.client_id.strip() else DEFAULT_PUBLIC_CLIENT_ID
+        return self.client_id if self.client_id else DEFAULT_PUBLIC_CLIENT_ID
 
     def get_auth_url(self, state: str = "onenote_sync") -> Dict[str, Any]:
         """Generates Microsoft OAuth2 login authorization URL."""
         cid = self.get_effective_client_id()
-        r_uri = "http://localhost" if cid == DEFAULT_PUBLIC_CLIENT_ID else self.redirect_uri
+        is_custom = cid != DEFAULT_PUBLIC_CLIENT_ID
+        r_uri = self.redirect_uri if is_custom else "http://localhost"
         msal_app = msal.ConfidentialClientApplication(
             cid,
             authority=self.authority,
@@ -66,7 +74,9 @@ class MicrosoftOneNoteClient:
         )
         return {
             "configured": True,
+            "is_custom": is_custom,
             "auth_url": auth_url,
+            "redirect_uri": r_uri,
             "authority": self.authority
         }
 

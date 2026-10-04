@@ -28,6 +28,7 @@ backend/data/indexes/users/
 backend/data/storage/*.jpg
 backend/data/storage/*.png
 backend/data/storage/users/
+!backend/seed_data/**
 
 # Logs
 npm-debug.log*
