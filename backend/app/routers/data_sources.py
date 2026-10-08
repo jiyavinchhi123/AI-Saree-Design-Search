@@ -85,6 +85,7 @@ async def get_auth_url():
 async def auth_callback(
     code: str = None, 
     error: str = None, 
+    error_description: str = None,
     redirect_uri: str = None, 
     format: str = Query("redirect"), 
     db: Session = Depends(get_db)
@@ -94,14 +95,31 @@ async def auth_callback(
     Saves OneNote connection and automatically redirects to the Vercel production URL (or localhost in dev).
     """
     from app.main import onenote_client
+    import urllib.parse
+
+    # Determine production vs development frontend URL using FRONTEND_URL environment variable
+    is_dev = os.getenv("ENV", "").lower() in ("dev", "development") or os.getenv("ENVIRONMENT", "").lower() in ("dev", "development")
+    default_frontend = "http://localhost:5173" if is_dev else "https://ai-saree-design-search.vercel.app"
+    frontend_env = (os.getenv("FRONTEND_URL") or "").strip()
+    if not frontend_env or (not is_dev and "localhost" in frontend_env):
+        frontend_base = default_frontend
+    else:
+        frontend_base = frontend_env
+    frontend_base = frontend_base.rstrip("/")
+
+    # If Microsoft reports an error during login, redirect to frontend URL (never localhost in production)
     if error:
-        raise HTTPException(status_code=400, detail=f"Authentication error: {error}")
+        err_msg = error_description or error or "Microsoft authentication declined"
+        return RedirectResponse(url=f"{frontend_base}/?error={urllib.parse.quote(err_msg)}", status_code=302)
+
     if not code:
-        raise HTTPException(status_code=400, detail="Missing authorization code")
+        err_msg = "Missing authorization code from Microsoft"
+        return RedirectResponse(url=f"{frontend_base}/?error={urllib.parse.quote(err_msg)}", status_code=302)
 
     result = await onenote_client.exchange_code_for_token(code, redirect_uri=redirect_uri, db=db)
     if not result.get("success"):
-        raise HTTPException(status_code=400, detail=result.get("error", "Token exchange failed"))
+        err_msg = result.get("error", "Token exchange failed")
+        return RedirectResponse(url=f"{frontend_base}/?error={urllib.parse.quote(str(err_msg))}", status_code=302)
 
     user_info = result.get("user", {})
     user_id = user_info.get("id", "")
@@ -109,10 +127,6 @@ async def auth_callback(
     user_email_display = user_info.get("email") or user_info.get("userPrincipalName") or ""
     user_initial = (user_display[0] if user_display else "U").upper()
 
-    # Determine production vs development frontend URL using FRONTEND_URL environment variable
-    is_dev = os.getenv("ENV", "").lower() in ("dev", "development") or os.getenv("ENVIRONMENT", "").lower() in ("dev", "development")
-    default_frontend = "http://localhost:5173" if is_dev else "https://ai-saree-design-search.vercel.app"
-    frontend_base = os.getenv("FRONTEND_URL", default_frontend).rstrip("/")
     redirect_target = f"{frontend_base}/?user_id={user_id}&connected=true"
 
     # Default to direct HTTP 302 redirect to Vercel production URL
@@ -391,8 +405,11 @@ async def exchange_auth_code(
             pass
 
     is_dev = os.getenv("ENV", "").lower() in ("dev", "development") or os.getenv("ENVIRONMENT", "").lower() in ("dev", "development")
-    default_redirect = "http://localhost" if is_dev else onenote_client.redirect_uri
-    redirect_uri = os.getenv("MS_REDIRECT_URI", default_redirect)
+    if is_dev:
+        redirect_uri = os.getenv("MS_REDIRECT_URI", "http://localhost")
+    else:
+        env_r = (os.getenv("MS_REDIRECT_URI") or "").strip()
+        redirect_uri = env_r if (env_r and "localhost" not in env_r) else "https://ai-saree-design-search.onrender.com/api/data-sources/onenote/auth/callback"
 
     result = await onenote_client.exchange_code_for_token(raw_code, redirect_uri=redirect_uri, db=db)
     if not result.get("success"):

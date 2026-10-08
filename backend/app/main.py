@@ -40,17 +40,6 @@ async def lifespan(app: FastAPI):
 
     print(f"[AI Saree Search] Server started. Loaded {vector_index_mgr.count()} indexed OneNote designs.")
 
-    # Pre-warm DINOv2 vision model in background so search requests are instant
-    import asyncio
-    async def warmup_vision_engine():
-        try:
-            print("[AI Saree Search] Pre-warming DINOv2 vision model in background...")
-            await asyncio.to_thread(lambda: extractor.model)
-            print("[AI Saree Search] DINOv2 vision model ready for instant search.")
-        except Exception as e:
-            print(f"[AI Saree Search] Vision model warmup note: {e}")
-
-    asyncio.create_task(warmup_vision_engine())
     yield
 
 
@@ -61,10 +50,23 @@ app = FastAPI(
     lifespan=lifespan
 )
 
-# CORS
+# CORS: Allow exact Vercel production domain, Vercel preview domains, and localhost for dev
+allowed_origins = [
+    "https://ai-saree-design-search.vercel.app",
+    "http://localhost:5173",
+    "http://localhost:3000",
+    "http://localhost:8000",
+    "http://127.0.0.1:5173",
+    "http://127.0.0.1:8000",
+]
+frontend_env = os.getenv("FRONTEND_URL", "").strip()
+if frontend_env and frontend_env not in allowed_origins:
+    allowed_origins.append(frontend_env.rstrip("/"))
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=allowed_origins,
+    allow_origin_regex=r"https://.*\.vercel\.app",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

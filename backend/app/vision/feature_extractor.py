@@ -53,6 +53,7 @@ class ColorInvariantFeatureExtractor:
         """Lazy load DINOv2 model on first search request to prevent boot-time OOM on low-memory servers"""
         if self._model is None:
             import gc
+            gc.collect()
             torch.set_grad_enabled(False)
             if self.device.type == "cpu":
                 try:
@@ -60,9 +61,12 @@ class ColorInvariantFeatureExtractor:
                 except Exception:
                     pass
             print("[AI Saree Search] Initializing DINOv2 vision model on demand...")
-            self._model = torch.hub.load('facebookresearch/dinov2', 'dinov2_vits14')
-            self._model.to(self.device)
-            self._model.eval()
+            model = torch.hub.load('facebookresearch/dinov2', 'dinov2_vits14')
+            model.to(self.device)
+            model.eval()
+            for p in model.parameters():
+                p.requires_grad = False
+            self._model = model
             gc.collect()
             print("[AI Saree Search] DINOv2 vision model loaded successfully.")
         return self._model
@@ -149,7 +153,7 @@ class ColorInvariantFeatureExtractor:
 
         # 2. Deep DINOv2 feature extraction with 4-zone spatial pooling
         tensor = self._prepare_dinov2_tensor(img_bgr)
-        with torch.no_grad():
+        with torch.inference_mode():
             feat = self.model.forward_features(tensor)
             cls_tok = feat['x_norm_clstoken'].squeeze(0)          # [384]
             patch_tok = feat['x_norm_patchtokens'].squeeze(0)      # [256, 384]
@@ -160,10 +164,12 @@ class ColorInvariantFeatureExtractor:
             body_field = grid[4:12, :, :].reshape(-1, 384).mean(dim=0)    # Middle 50% (jaal / motifs)
             bottom_border = grid[12:, :, :].reshape(-1, 384).mean(dim=0)  # Bottom 25% (border / pallu)
 
-        cls_np = cls_tok.cpu().numpy()
-        body_np = body_field.cpu().numpy()
-        top_np = top_border.cpu().numpy()
-        bottom_np = bottom_border.cpu().numpy()
+            cls_np = cls_tok.cpu().numpy()
+            body_np = body_field.cpu().numpy()
+            top_np = top_border.cpu().numpy()
+            bottom_np = bottom_border.cpu().numpy()
+
+        del tensor, feat, cls_tok, patch_tok, grid
 
         # Zone-wise L2 normalization before weighted composition
         cls_np /= (np.linalg.norm(cls_np) + 1e-7)

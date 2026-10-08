@@ -1,6 +1,15 @@
 const rawApiUrl = import.meta.env.VITE_API_URL;
-const API_BASE = rawApiUrl 
-  ? (rawApiUrl.endsWith('/api') ? rawApiUrl : `${rawApiUrl.replace(/\/$/, '')}/api`)
+const isProduction = typeof window !== 'undefined' && 
+  window.location.hostname !== 'localhost' && 
+  window.location.hostname !== '127.0.0.1';
+
+// In production, prevent any legacy localhost or undefined VITE_API_URL from breaking requests
+const sanitizedApiUrl = (isProduction && rawApiUrl && (rawApiUrl.includes('localhost') || rawApiUrl.includes('127.0.0.1')))
+  ? 'https://ai-saree-design-search.onrender.com'
+  : (rawApiUrl || '');
+
+const API_BASE = sanitizedApiUrl 
+  ? (sanitizedApiUrl.endsWith('/api') ? sanitizedApiUrl : `${sanitizedApiUrl.replace(/\/$/, '')}/api`)
   : '/api';
 
 export const resolveImageUrl = (url) => {
@@ -8,7 +17,9 @@ export const resolveImageUrl = (url) => {
   if (url.startsWith('http://') || url.startsWith('https://') || url.startsWith('data:') || url.startsWith('blob:')) {
     return url;
   }
-  const backendBase = rawApiUrl ? rawApiUrl.replace(/\/api\/?$/, '').replace(/\/$/, '') : '';
+  const backendBase = sanitizedApiUrl 
+    ? sanitizedApiUrl.replace(/\/api\/?$/, '').replace(/\/$/, '') 
+    : (isProduction ? 'https://ai-saree-design-search.onrender.com' : '');
   return backendBase ? `${backendBase}${url.startsWith('/') ? '' : '/'}${url}` : url;
 };
 
@@ -238,6 +249,10 @@ export const api = {
       throw new Error(err.detail || 'OneNote sync failed');
     }
     return res.json();
+  },
+
+  syncOneNoteNotebooks: async (notebookIds = null) => {
+    return api.syncOneNote(notebookIds);
   },
 
   disconnectOneNote: async () => {

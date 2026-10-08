@@ -16,6 +16,9 @@ export default function App() {
       if (userId) {
         localStorage.setItem('saree_current_user_id', userId);
       }
+      if (params.get('connected') === 'true' || params.get('error')) {
+        return 'data-sources';
+      }
       if (path.includes('search')) return 'search';
       if (path.includes('data-sources') || path.includes('sources') || path.includes('onenote')) return 'data-sources';
       if (path.includes('history')) return 'history';

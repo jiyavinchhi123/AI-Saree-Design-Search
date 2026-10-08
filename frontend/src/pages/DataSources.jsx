@@ -82,6 +82,15 @@ export default function DataSources() {
   }, [loadNotebooks]);
 
   useEffect(() => {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const urlErr = params.get('error');
+      if (urlErr) {
+        setNotification({ type: 'error', message: `Microsoft OAuth Notice: ${decodeURIComponent(urlErr)}` });
+      } else if (params.get('connected') === 'true') {
+        setNotification({ type: 'success', message: 'Microsoft OneNote account successfully connected!' });
+      }
+    } catch (e) {}
     loadData();
     return () => {
       if (pollingRef.current) clearInterval(pollingRef.current);

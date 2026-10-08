@@ -68,7 +68,7 @@ class MicrosoftAuthConfig(BaseModel):
     client_id: str
     tenant_id: Optional[str] = "common"
     client_secret: Optional[str] = None
-    redirect_uri: Optional[str] = "http://localhost:8000/api/onenote/auth/callback"
+    redirect_uri: Optional[str] = "https://ai-saree-design-search.onrender.com/api/data-sources/onenote/auth/callback"
 
 class OneNoteSyncStatus(BaseModel):
     is_configured: bool

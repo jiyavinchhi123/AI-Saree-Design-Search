@@ -36,11 +36,10 @@ class MicrosoftOneNoteClient:
         self.tenant_id = (tenant_id or os.getenv("MS_TENANT_ID", "common")).strip()
         is_dev = os.getenv("ENV", "").lower() in ("dev", "development") or os.getenv("ENVIRONMENT", "").lower() in ("dev", "development")
         default_redirect = "http://localhost" if is_dev else "https://ai-saree-design-search.onrender.com/api/data-sources/onenote/auth/callback"
-        self.redirect_uri = (
-            os.getenv("MS_REDIRECT_URI") 
-            or redirect_uri 
-            or default_redirect
-        ).strip()
+        env_r = (os.getenv("MS_REDIRECT_URI") or redirect_uri or default_redirect).strip()
+        if not is_dev and "localhost" in env_r:
+            env_r = "https://ai-saree-design-search.onrender.com/api/data-sources/onenote/auth/callback"
+        self.redirect_uri = env_r
         self.authority = f"https://login.microsoftonline.com/{self.tenant_id}"
 
         # In-memory dictionary of active device code flows keyed by session_id
@@ -56,30 +55,32 @@ class MicrosoftOneNoteClient:
         return self.client_id if self.client_id else DEFAULT_PUBLIC_CLIENT_ID
 
     def get_auth_url(self, state: str = "onenote_sync") -> Dict[str, Any]:
-        """Generates Microsoft OAuth2 login authorization URL."""
+        """Generates Microsoft OAuth2 login authorization URL with explicit parameters."""
+        import urllib.parse
         cid = self.get_effective_client_id()
         is_custom = cid != DEFAULT_PUBLIC_CLIENT_ID
         is_dev = os.getenv("ENV", "").lower() in ("dev", "development") or os.getenv("ENVIRONMENT", "").lower() in ("dev", "development")
-        if os.getenv("MS_REDIRECT_URI"):
-            r_uri = os.getenv("MS_REDIRECT_URI").strip()
-        elif is_dev:
-            r_uri = "http://localhost"
-        else:
-            r_uri = self.redirect_uri
-        msal_app = msal.ConfidentialClientApplication(
-            cid,
-            authority=self.authority,
-            client_credential=self.client_secret
-        ) if self.client_secret else msal.PublicClientApplication(
-            cid,
-            authority=self.authority
-        )
 
-        auth_url = msal_app.get_authorization_request_url(
-            scopes=SCOPES,
-            redirect_uri=r_uri,
-            state=state
-        )
+        if is_dev:
+            r_uri = os.getenv("MS_REDIRECT_URI", "http://localhost").strip()
+        else:
+            env_r_uri = (os.getenv("MS_REDIRECT_URI") or "").strip()
+            if env_r_uri and "localhost" not in env_r_uri:
+                r_uri = env_r_uri
+            else:
+                r_uri = "https://ai-saree-design-search.onrender.com/api/data-sources/onenote/auth/callback"
+
+        scopes_list = ["Notes.Read", "User.Read", "offline_access", "openid", "profile"]
+        params = {
+            "client_id": cid,
+            "response_type": "code",
+            "redirect_uri": r_uri,
+            "response_mode": "query",
+            "scope": " ".join(scopes_list),
+            "state": state
+        }
+        auth_url = f"{self.authority}/oauth2/v2.0/authorize?{urllib.parse.urlencode(params)}"
+
         return {
             "configured": True,
             "is_custom": is_custom,
@@ -193,8 +194,15 @@ class MicrosoftOneNoteClient:
 
         cid = self.get_effective_client_id()
         is_dev = os.getenv("ENV", "").lower() in ("dev", "development") or os.getenv("ENVIRONMENT", "").lower() in ("dev", "development")
-        default_r_uri = "http://localhost" if is_dev else self.redirect_uri
-        r_uri = redirect_uri or os.getenv("MS_REDIRECT_URI") or default_r_uri
+        
+        if is_dev:
+            r_uri = redirect_uri or os.getenv("MS_REDIRECT_URI") or "http://localhost"
+        else:
+            env_r_uri = (redirect_uri or os.getenv("MS_REDIRECT_URI") or "").strip()
+            if env_r_uri and "localhost" not in env_r_uri:
+                r_uri = env_r_uri
+            else:
+                r_uri = "https://ai-saree-design-search.onrender.com/api/data-sources/onenote/auth/callback"
 
         msal_app = msal.ConfidentialClientApplication(
             cid,
@@ -205,10 +213,11 @@ class MicrosoftOneNoteClient:
             authority=self.authority
         )
 
+        scopes_list = ["Notes.Read", "User.Read", "offline_access", "openid", "profile"]
         result = await asyncio.to_thread(
             msal_app.acquire_token_by_authorization_code,
             code=code,
-            scopes=SCOPES,
+            scopes=scopes_list,
             redirect_uri=r_uri
         )
 
