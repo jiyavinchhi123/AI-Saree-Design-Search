@@ -725,6 +725,11 @@ async def sync_onenote(
                             print(f"  Exact Graph links.oneNoteWebUrl.href: {page_web_url}", flush=True)
                         except Exception as img_err:
                             print(f"[OneNote Ingest] Error indexing image {res_url}: {img_err}", flush=True)
+                        finally:
+                            if 'structural_map' in locals():
+                                del structural_map
+                            import gc
+                            gc.collect()
 
         # RECONCILIATION: CLOUD IS THE ONLY SOURCE OF TRUTH
         # Rebuild vector index completely from active cloud items (handles additions, updates & deletions)

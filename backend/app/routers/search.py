@@ -44,6 +44,7 @@ async def search_saree_design(
     contents = await file.read()
     nparr = np.frombuffer(contents, np.uint8)
     img_bgr = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+    del contents, nparr  # Release uploaded byte buffer immediately
     if img_bgr is None:
         raise HTTPException(status_code=400, detail="Invalid image file format")
     cv2.imwrite(query_img_path, img_bgr)
@@ -53,6 +54,7 @@ async def search_saree_design(
         import asyncio
         embedding, structural_map = await asyncio.to_thread(extractor.extract_features_from_image, img_bgr)
     except Exception as e:
+        del img_bgr
         err_msg = str(e)
         if "timeout" in err_msg.lower() or "connection" in err_msg.lower():
             raise HTTPException(
@@ -60,11 +62,16 @@ async def search_saree_design(
                 detail="AI Vision Model is warming up on the cloud server. Please retry in a few seconds."
             )
         raise HTTPException(status_code=500, detail=f"Failed to process image features: {err_msg}")
+    finally:
+        del img_bgr
 
     # Save structural tensor preview for user inspection
     struct_preview_filename = f"struct_query_{query_id}.jpg"
     struct_preview_path = os.path.join(storage_dir, struct_preview_filename)
     cv2.imwrite(struct_preview_path, structural_map)
+    del structural_map
+    import gc
+    gc.collect()
 
     # 4. Check if user's connected OneNote has any indexed images
     if user_index.count() == 0:

@@ -21,6 +21,7 @@ class SareeVectorIndex:
         
         self.index: faiss.IndexFlatIP = faiss.IndexFlatIP(self.dimension)
         self.metadata_store: List[Dict[str, Any]] = []
+        self._is_loaded = False
 
         # Load existing index if present
         self.load()
@@ -111,23 +112,28 @@ class SareeVectorIndex:
 
     def load(self) -> bool:
         """Loads index and metadata if files exist."""
+        if getattr(self, '_is_loaded', False) and self.index.ntotal > 0:
+            return True
         if os.path.exists(self.index_file) and os.path.exists(self.meta_file):
             try:
                 self.index = faiss.read_index(self.index_file)
                 self.dimension = self.index.d
                 with open(self.meta_file, "r", encoding="utf-8") as f:
                     self.metadata_store = json.load(f)
+                self._is_loaded = True
                 return True
             except Exception as e:
                 print(f"Warning: Failed to load existing index: {e}")
                 self.index = faiss.IndexFlatIP(self.dimension)
                 self.metadata_store = []
+        self._is_loaded = True
         return False
 
     def clear(self):
         """Clears all indexed designs."""
         self.index = faiss.IndexFlatIP(self.dimension)
         self.metadata_store = []
+        self._is_loaded = False
         if os.path.exists(self.index_file):
             os.remove(self.index_file)
         if os.path.exists(self.meta_file):
@@ -144,6 +150,7 @@ class SareeVectorIndex:
                 meta["index_id"] = idx
                 self.metadata_store.append(meta)
         self.save()
+        self._is_loaded = True
 
     def count(self) -> int:
         return self.index.ntotal
@@ -159,12 +166,16 @@ class VectorIndexManager:
         self.base_dir = base_dir
         self.dimension = dimension
         self._user_indexes: Dict[str, SareeVectorIndex] = {}
-        # Empty placeholder with 0 designs for unauthenticated state
-        self._empty_index = SareeVectorIndex(
-            dimension=self.dimension,
-            index_file=os.path.join(base_dir, "empty_faiss.index"),
-            meta_file=os.path.join(base_dir, "empty_meta.json")
-        )
+        self._empty_index: Optional[SareeVectorIndex] = None
+
+    def _get_empty_index(self) -> SareeVectorIndex:
+        if self._empty_index is None:
+            self._empty_index = SareeVectorIndex(
+                dimension=self.dimension,
+                index_file=os.path.join(self.base_dir, "empty_faiss.index"),
+                meta_file=os.path.join(self.base_dir, "empty_meta.json")
+            )
+        return self._empty_index
 
     def get_index(self, user_id: Optional[str] = None) -> SareeVectorIndex:
         if not user_id:
@@ -179,7 +190,7 @@ class VectorIndexManager:
                 pass
 
         if not user_id:
-            return self._empty_index
+            return self._get_empty_index()
 
         safe_uid = re.sub(r'[^a-zA-Z0-9_\-]', '_', user_id)
         if safe_uid not in self._user_indexes:
@@ -192,17 +203,11 @@ class VectorIndexManager:
                 index_file=idx_file,
                 meta_file=meta_file
             )
-        else:
-            if self._user_indexes[safe_uid].count() == 0:
-                self._user_indexes[safe_uid].load()
 
         return self._user_indexes[safe_uid]
 
     def count(self, user_id: Optional[str] = None) -> int:
-        idx = self.get_index(user_id)
-        if idx.count() == 0:
-            idx.load()
-        return idx.count()
+        return self.get_index(user_id).count()
 
     @property
     def metadata_store(self) -> List[Dict[str, Any]]:

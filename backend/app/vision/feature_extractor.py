@@ -24,6 +24,8 @@ from PIL import Image
 from typing import Tuple, List, Union
 
 class ColorInvariantFeatureExtractor:
+    _shared_model = None  # Process-wide singleton: DINOv2 is loaded strictly ONCE across the entire backend
+
     def __init__(self, device: str = None):
         if device is None:
             self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -37,8 +39,6 @@ class ColorInvariantFeatureExtractor:
             except Exception:
                 pass
 
-        self._model = None
-
         # ImageNet normalization for DINOv2
         self.normalize = transforms.Normalize(
             mean=[0.485, 0.456, 0.406],
@@ -50,8 +50,8 @@ class ColorInvariantFeatureExtractor:
 
     @property
     def model(self):
-        """Lazy load DINOv2 model on first search request to prevent boot-time OOM on low-memory servers"""
-        if self._model is None:
+        """Lazy load DINOv2 model on first search request strictly ONCE as a shared singleton"""
+        if ColorInvariantFeatureExtractor._shared_model is None:
             import gc
             gc.collect()
             torch.set_grad_enabled(False)
@@ -60,16 +60,16 @@ class ColorInvariantFeatureExtractor:
                     torch.set_num_threads(1)
                 except Exception:
                     pass
-            print("[AI Saree Search] Initializing DINOv2 vision model on demand...")
+            print("[AI Saree Search] Initializing DINOv2 vision model on demand (singleton)...")
             model = torch.hub.load('facebookresearch/dinov2', 'dinov2_vits14')
             model.to(self.device)
             model.eval()
             for p in model.parameters():
                 p.requires_grad = False
-            self._model = model
+            ColorInvariantFeatureExtractor._shared_model = model
             gc.collect()
             print("[AI Saree Search] DINOv2 vision model loaded successfully.")
-        return self._model
+        return ColorInvariantFeatureExtractor._shared_model
 
     def preprocess_to_structural_tensor(self, image_np: np.ndarray) -> np.ndarray:
         """
@@ -110,17 +110,21 @@ class ColorInvariantFeatureExtractor:
         return structural_map
 
     def _prepare_dinov2_tensor(self, img_bgr: np.ndarray) -> torch.Tensor:
-        """Prepares a color-invariant CLAHE luminance tensor ready for DINOv2."""
+        """Prepares a color-invariant CLAHE luminance tensor ready for DINOv2 with minimal RAM."""
         if len(img_bgr.shape) == 2:
             gray = img_bgr
         else:
             gray = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2GRAY)
 
-        luma = self.clahe.apply(gray)
-        # Duplicate contrast-normalized luma into 3 channels (pure color-invariance)
+        # Resize to 224x224 FIRST before CLAHE/RGB conversion so operations run on 50KB instead of 50MB
+        if gray.shape[0] != 224 or gray.shape[1] != 224:
+            gray_224 = cv2.resize(gray, (224, 224), interpolation=cv2.INTER_AREA)
+        else:
+            gray_224 = gray
+
+        luma = self.clahe.apply(gray_224)
         rgb = cv2.cvtColor(luma, cv2.COLOR_GRAY2RGB)
-        pil_img = Image.fromarray(rgb).resize((224, 224), Image.BICUBIC)
-        tensor = self.normalize(self.to_tensor(pil_img)).unsqueeze(0).to(self.device)
+        tensor = self.normalize(self.to_tensor(rgb)).unsqueeze(0).to(self.device)
         return tensor
 
     def extract_features_from_image(self, image_input: Union[str, Image.Image, np.ndarray]) -> Tuple[np.ndarray, np.ndarray]:
@@ -134,6 +138,7 @@ class ColorInvariantFeatureExtractor:
             embedding: 1D numpy array (L2-normalized, ready for FAISS cosine similarity)
             structural_map: 3-channel numpy array showing the AI vision structural map
         """
+        import gc
         if isinstance(image_input, str):
             if not os.path.exists(image_input):
                 raise FileNotFoundError(f"Image not found: {image_input}")
@@ -143,16 +148,25 @@ class ColorInvariantFeatureExtractor:
         elif isinstance(image_input, Image.Image):
             img_rgb = np.array(image_input)
             img_bgr = cv2.cvtColor(img_rgb, cv2.COLOR_RGB2BGR)
+            del img_rgb
         elif isinstance(image_input, np.ndarray):
-            img_bgr = image_input
+            img_bgr = image_input.copy()
         else:
             raise TypeError("Unsupported image input type")
 
-        # 1. Structural tensor representation for inspection
+        # Downscale immediately to max 640px if image is oversized to prevent high-res RAM bloat
+        h, w = img_bgr.shape[:2]
+        if max(h, w) > 640:
+            scale = 640.0 / max(h, w)
+            img_bgr = cv2.resize(img_bgr, (int(w * scale), int(h * scale)), interpolation=cv2.INTER_AREA)
+
+        # 1. Structural tensor representation for inspection (224x224x3)
         structural_map = self.preprocess_to_structural_tensor(img_bgr)
 
         # 2. Deep DINOv2 feature extraction with 4-zone spatial pooling
         tensor = self._prepare_dinov2_tensor(img_bgr)
+        del img_bgr  # Release raw image immediately!
+
         with torch.inference_mode():
             feat = self.model.forward_features(tensor)
             cls_tok = feat['x_norm_clstoken'].squeeze(0)          # [384]
@@ -170,6 +184,7 @@ class ColorInvariantFeatureExtractor:
             bottom_np = bottom_border.cpu().numpy()
 
         del tensor, feat, cls_tok, patch_tok, grid
+        gc.collect()
 
         # Zone-wise L2 normalization before weighted composition
         cls_np /= (np.linalg.norm(cls_np) + 1e-7)
