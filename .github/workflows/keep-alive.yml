@@ -1,0 +1,80 @@
+name: Backend Keep-Alive Ping
+
+on:
+  schedule:
+    # Runs every 10 minutes to prevent Render free-tier instance from sleeping
+    - cron: '*/10 * * * *'
+  workflow_dispatch:
+
+jobs:
+  ping:
+    name: Keep-Alive Ping
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping Render Backend
+        run: |
+          set -e
+          echo "=========================================="
+          echo "Starting Keep-Alive Ping for Render Backend"
+          echo "Timestamp: $(date -u +"%Y-%m-%d %H:%M:%SZ")"
+          echo "=========================================="
+
+          TARGET_URL="https://ai-saree-design-search.onrender.com/"
+          HEALTH_URL="https://ai-saree-design-search.onrender.com/api/health"
+
+          echo "Target Root URL:   $TARGET_URL"
+          echo "Target Health URL: $HEALTH_URL"
+          echo ""
+
+          # 1. Ping the Root URL as requested
+          echo "--> [Step 1] Pinging Root URL: $TARGET_URL"
+          ROOT_HTTP_CODE=$(curl -s -o /tmp/root_response.txt -w "%{http_code}" \
+            --connect-timeout 20 \
+            --max-time 60 \
+            --retry 3 \
+            --retry-delay 10 \
+            --retry-connrefused \
+            "$TARGET_URL" || echo "FAILED")
+
+          echo "Root URL HTTP Response Status: $ROOT_HTTP_CODE"
+          if [ -f /tmp/root_response.txt ] && [ -s /tmp/root_response.txt ]; then
+            echo "Root URL Response Preview:"
+            head -n 10 /tmp/root_response.txt
+            echo ""
+          fi
+
+          # 2. Ping the Health Check URL to verify application service status
+          echo "--> [Step 2] Pinging API Health Endpoint: $HEALTH_URL"
+          HEALTH_HTTP_CODE=$(curl -s -o /tmp/health_response.txt -w "%{http_code}" \
+            --connect-timeout 20 \
+            --max-time 60 \
+            --retry 3 \
+            --retry-delay 10 \
+            --retry-connrefused \
+            "$HEALTH_URL" || echo "FAILED")
+
+          echo "Health URL HTTP Response Status: $HEALTH_HTTP_CODE"
+          if [ -f /tmp/health_response.txt ] && [ -s /tmp/health_response.txt ]; then
+            echo "Health Response Body:"
+            cat /tmp/health_response.txt
+            echo ""
+          fi
+
+          echo "=========================================="
+          echo "Result Summary:"
+          echo "  - Root URL Status:   $ROOT_HTTP_CODE"
+          echo "  - Health URL Status: $HEALTH_HTTP_CODE"
+          echo "=========================================="
+
+          # Validate that at least one endpoint reached the backend successfully
+          if [ "$HEALTH_HTTP_CODE" = "200" ]; then
+            echo "SUCCESS: Backend is awake, operational, and responsive (HTTP 200 from /api/health)."
+            exit 0
+          elif [ "$ROOT_HTTP_CODE" != "FAILED" ] && [ "$ROOT_HTTP_CODE" != "000" ] && [ "$ROOT_HTTP_CODE" -lt 500 ]; then
+            echo "SUCCESS: Backend responded with HTTP $ROOT_HTTP_CODE. Server is awake."
+            exit 0
+          else
+            echo "ERROR: Backend keep-alive failed. Server did not return a valid operational response."
+            echo "Root Status: $ROOT_HTTP_CODE, Health Status: $HEALTH_HTTP_CODE"
+            exit 1
+          fi
