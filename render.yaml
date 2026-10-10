@@ -22,3 +22,9 @@ services:
         value: "https://ai-saree-design-search.vercel.app"
       - key: MS_REDIRECT_URI
         value: "https://ai-saree-design-search.onrender.com/api/data-sources/onenote/auth/callback"
+      - key: MS_TENANT_ID
+        value: "common"
+      - key: MS_CLIENT_ID
+        sync: false
+      - key: MS_CLIENT_SECRET
+        sync: false

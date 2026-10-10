@@ -76,10 +76,70 @@ async def get_onenote_status(
     )
 
 @router.get("/onenote/auth/url")
-async def get_auth_url():
-    """Generates standard Microsoft OAuth2 login authorization URL."""
+async def get_auth_url(db: Session = Depends(get_db)):
+    """Generates standard Microsoft OAuth2 login authorization URL with verified parameters."""
     from app.main import onenote_client
-    return onenote_client.get_auth_url()
+    return onenote_client.get_auth_url(db=db)
+
+@router.get("/onenote/auth/config")
+async def get_auth_config(db: Session = Depends(get_db)):
+    """Returns the current Microsoft Entra application configuration and redirect URI."""
+    from app.main import onenote_client
+    from app.onenote.graph_client import PROD_REDIRECT_URI
+    onenote_client._load_settings_from_db(db)
+    cid = onenote_client.get_effective_client_id(db)
+    is_custom = onenote_client.is_custom_app(db)
+    return {
+        "is_configured": is_custom,
+        "is_custom": is_custom,
+        "client_id": cid if is_custom else "",
+        "tenant_id": onenote_client.tenant_id,
+        "has_secret": bool(onenote_client.client_secret),
+        "redirect_uri": PROD_REDIRECT_URI
+    }
+
+@router.post("/onenote/auth/config")
+async def save_auth_config(payload: dict = Body(...), db: Session = Depends(get_db)):
+    """Saves Microsoft Entra App ID and credentials into database settings."""
+    from app.main import onenote_client
+    from app.onenote.graph_client import PROD_REDIRECT_URI
+    client_id = (payload.get("client_id") or "").strip()
+    client_secret = (payload.get("client_secret") or "").strip()
+    tenant_id = (payload.get("tenant_id") or "common").strip()
+
+    if client_id:
+        rec = db.query(SettingsRecord).filter(SettingsRecord.key == "ms_client_id").first()
+        if not rec:
+            rec = SettingsRecord(key="ms_client_id", value=client_id)
+            db.add(rec)
+        else:
+            rec.value = client_id
+
+    if client_secret:
+        rec = db.query(SettingsRecord).filter(SettingsRecord.key == "ms_client_secret").first()
+        if not rec:
+            rec = SettingsRecord(key="ms_client_secret", value=client_secret)
+            db.add(rec)
+        else:
+            rec.value = client_secret
+
+    if tenant_id:
+        rec = db.query(SettingsRecord).filter(SettingsRecord.key == "ms_tenant_id").first()
+        if not rec:
+            rec = SettingsRecord(key="ms_tenant_id", value=tenant_id)
+            db.add(rec)
+        else:
+            rec.value = tenant_id
+
+    db.commit()
+    onenote_client._load_settings_from_db(db)
+    return {
+        "status": "success",
+        "message": "Microsoft Entra App configuration saved successfully",
+        "client_id": onenote_client.client_id,
+        "is_configured": onenote_client.is_custom_app(db),
+        "redirect_uri": PROD_REDIRECT_URI
+    }
 
 @router.get("/onenote/auth/callback")
 async def auth_callback(
@@ -92,46 +152,42 @@ async def auth_callback(
 ):
     """
     Handles OAuth redirect callback from Microsoft.
-    Saves OneNote connection and automatically redirects to the Vercel production URL (or localhost in dev).
+    Saves OneNote connection and redirects to the Vercel production URL (https://ai-saree-design-search.vercel.app/).
     """
     from app.main import onenote_client
+    from app.onenote.graph_client import is_production, PROD_FRONTEND_URL, PROD_REDIRECT_URI
     import urllib.parse
 
-    # Determine production vs development frontend URL using FRONTEND_URL environment variable
-    is_dev = os.getenv("ENV", "").lower() in ("dev", "development") or os.getenv("ENVIRONMENT", "").lower() in ("dev", "development")
-    default_frontend = "http://localhost:5173" if is_dev else "https://ai-saree-design-search.vercel.app"
-    frontend_env = (os.getenv("FRONTEND_URL") or "").strip()
-    if not frontend_env or (not is_dev and "localhost" in frontend_env):
-        frontend_base = default_frontend
-    else:
-        frontend_base = frontend_env
-    frontend_base = frontend_base.rstrip("/")
+    prod = is_production()
+    frontend_base = PROD_FRONTEND_URL if prod else (os.getenv("FRONTEND_URL") or "http://localhost:5173").rstrip("/")
+    if prod and ("localhost" in frontend_base or "127.0.0.1" in frontend_base):
+        frontend_base = PROD_FRONTEND_URL
 
-    # If Microsoft reports an error during login, redirect to frontend URL (never localhost in production)
+    # If Microsoft reports an error during login, redirect to Vercel production URL (never localhost in production)
     if error:
         err_msg = error_description or error or "Microsoft authentication declined"
+        print(f"[Microsoft OAuth Callback Error] {error}: {error_description}", flush=True)
         return RedirectResponse(url=f"{frontend_base}/?error={urllib.parse.quote(err_msg)}", status_code=302)
 
     if not code:
         err_msg = "Missing authorization code from Microsoft"
+        print(f"[Microsoft OAuth Callback Error] Missing authorization code in callback", flush=True)
         return RedirectResponse(url=f"{frontend_base}/?error={urllib.parse.quote(err_msg)}", status_code=302)
 
-    result = await onenote_client.exchange_code_for_token(code, redirect_uri=redirect_uri, db=db)
+    callback_redirect_uri = PROD_REDIRECT_URI if prod else (redirect_uri or "http://localhost")
+    result = await onenote_client.exchange_code_for_token(code, redirect_uri=callback_redirect_uri, db=db)
     if not result.get("success"):
         err_msg = result.get("error", "Token exchange failed")
+        print(f"[Microsoft OAuth Callback Error] Token exchange failed: {err_msg}", flush=True)
         return RedirectResponse(url=f"{frontend_base}/?error={urllib.parse.quote(str(err_msg))}", status_code=302)
 
     user_info = result.get("user", {})
     user_id = user_info.get("id", "")
-    user_display = user_info.get("displayName") or "Microsoft User"
-    user_email_display = user_info.get("email") or user_info.get("userPrincipalName") or ""
-    user_initial = (user_display[0] if user_display else "U").upper()
+    print(f"[Microsoft OAuth Callback Success] Successfully authenticated: {user_info.get('displayName')} ({user_info.get('email')})", flush=True)
 
-    redirect_target = f"{frontend_base}/?user_id={user_id}&connected=true"
-
-    # Default to direct HTTP 302 redirect to Vercel production URL
-    if format != "html":
-        return RedirectResponse(url=redirect_target, status_code=302)
+    # In production, redirect EXACTLY to https://ai-saree-design-search.vercel.app/ (with connected=true)
+    redirect_target = f"{frontend_base}/?connected=true&user_id={user_id}"
+    return RedirectResponse(url=redirect_target, status_code=302)
 
     html_content = f"""<!DOCTYPE html>
 <html lang="en">
@@ -404,12 +460,13 @@ async def exchange_auth_code(
         except Exception:
             pass
 
-    is_dev = os.getenv("ENV", "").lower() in ("dev", "development") or os.getenv("ENVIRONMENT", "").lower() in ("dev", "development")
-    if is_dev:
-        redirect_uri = os.getenv("MS_REDIRECT_URI", "http://localhost")
+    from app.onenote.graph_client import is_production, PROD_REDIRECT_URI
+    prod = is_production()
+    if prod:
+        redirect_uri = PROD_REDIRECT_URI
     else:
         env_r = (os.getenv("MS_REDIRECT_URI") or "").strip()
-        redirect_uri = env_r if (env_r and "localhost" not in env_r) else "https://ai-saree-design-search.onrender.com/api/data-sources/onenote/auth/callback"
+        redirect_uri = env_r if env_r else "http://localhost"
 
     result = await onenote_client.exchange_code_for_token(raw_code, redirect_uri=redirect_uri, db=db)
     if not result.get("success"):

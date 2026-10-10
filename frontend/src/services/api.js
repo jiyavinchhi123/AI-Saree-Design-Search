@@ -227,6 +227,26 @@ export const api = {
     return res.json();
   },
 
+  getOneNoteAuthConfig: async () => {
+    const res = await fetch(`${API_BASE}/data-sources/onenote/auth/config`, {
+      headers: getHeaders(),
+    });
+    return res.json();
+  },
+
+  saveOneNoteAuthConfig: async (config) => {
+    const res = await fetch(`${API_BASE}/data-sources/onenote/auth/config`, {
+      method: 'POST',
+      headers: getHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify(config),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || 'Failed to save configuration');
+    }
+    return res.json();
+  },
+
   getOneNoteNotebooks: async () => {
     const res = await fetch(`${API_BASE}/data-sources/onenote/notebooks`, {
       headers: getHeaders(),

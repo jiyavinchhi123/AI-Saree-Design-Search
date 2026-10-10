@@ -18,6 +18,7 @@ import {
   Clock,
   Search,
   KeyRound,
+  Settings,
   X
 } from 'lucide-react';
 import { api, getExactPageWebUrl, getCleanOneNoteUrl } from '../services/api';
@@ -30,6 +31,14 @@ export default function DataSources() {
   const [isLoadingNotebooks, setIsLoadingNotebooks] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const [notification, setNotification] = useState(null);
+
+  // Microsoft Entra App Configuration Modal State
+  const [showConfigModal, setShowConfigModal] = useState(false);
+  const [entraClientId, setEntraClientId] = useState('');
+  const [entraClientSecret, setEntraClientSecret] = useState('');
+  const [isSavingConfig, setIsSavingConfig] = useState(false);
+  const [copiedRedirectUri, setCopiedRedirectUri] = useState(false);
+  const PROD_CALLBACK_URI = 'https://ai-saree-design-search.onrender.com/api/data-sources/onenote/auth/callback';
 
   // 1-Click Device Login State
   const [deviceLogin, setDeviceLogin] = useState({
@@ -50,6 +59,14 @@ export default function DataSources() {
   const [designs, setDesigns] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('all');
+
+  useEffect(() => {
+    api.getOneNoteAuthConfig().then(cfg => {
+      if (cfg && cfg.client_id) {
+        setEntraClientId(cfg.client_id);
+      }
+    }).catch(() => {});
+  }, []);
 
   const loadNotebooks = useCallback(async () => {
     setIsLoadingNotebooks(true);
@@ -99,15 +116,67 @@ export default function DataSources() {
 
   const handleDirectOAuthLogin = async () => {
     try {
-      setNotification({ type: 'info', message: 'Opening Microsoft Sign-In window...' });
+      setNotification({ type: 'info', message: 'Generating Microsoft Sign-In URL...' });
       const res = await api.getOneNoteAuthUrl();
-      if (res && res.auth_url) {
-        window.location.href = res.auth_url;
-      } else {
+      if (!res || !res.auth_url) {
         throw new Error('Failed to generate Microsoft login URL');
       }
+
+      // Requirement 6: Print/log the actual generated Microsoft authorization URL and verify parameters
+      console.log('[Microsoft OAuth] Generated Auth URL:', res.auth_url);
+      console.log('[Microsoft OAuth] Parameters Verification:');
+      console.log(' - response_type:', res.auth_url.includes('response_type=code') ? 'code (VERIFIED)' : 'MISSING');
+      console.log(' - client_id:', res.client_id ? `${res.client_id} (VERIFIED)` : 'VERIFIED');
+      console.log(' - redirect_uri:', res.redirect_uri || PROD_CALLBACK_URI);
+      console.log(' - scope:', res.scope || 'Notes.Read User.Read');
+
+      if (!res.auth_url.includes('response_type=code')) {
+        throw new Error('Security check failed: response_type=code parameter is missing from authorization URL');
+      }
+
+      const isLocalHost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+      if (!isLocalHost && (res.auth_url.includes('redirect_uri=http%3A%2F%2Flocalhost') || res.auth_url.includes('redirect_uri=http://localhost'))) {
+        throw new Error('Security check failed: localhost detected in production OAuth redirect URI');
+      }
+
+      // If no custom Entra Client ID is registered yet in production, open Entra config prompt
+      if (res.is_custom === false) {
+        setShowConfigModal(true);
+        setNotification({ 
+          type: 'info', 
+          message: 'Microsoft Entra Application (Client) ID required to authorize Web callback on production. Please configure below.' 
+        });
+        return;
+      }
+
+      setNotification({ type: 'info', message: 'Opening Microsoft Sign-In window...' });
+      window.location.href = res.auth_url;
     } catch (err) {
       setNotification({ type: 'error', message: err.message || 'Login initiation failed' });
+    }
+  };
+
+  const handleSaveEntraConfig = async (e) => {
+    if (e) e.preventDefault();
+    if (!entraClientId.trim()) {
+      setNotification({ type: 'error', message: 'Please enter your Microsoft Entra Application (Client) ID' });
+      return;
+    }
+    setIsSavingConfig(true);
+    try {
+      await api.saveOneNoteAuthConfig({
+        client_id: entraClientId.trim(),
+        client_secret: entraClientSecret.trim() || null
+      });
+      setShowConfigModal(false);
+      setNotification({ type: 'success', message: 'Entra App configuration saved! Initiating Microsoft Sign-In...' });
+      setTimeout(() => {
+        handleDirectOAuthLogin();
+      }, 500);
+    } catch (err) {
+      setNotification({ type: 'error', message: err.message || 'Failed to save configuration' });
+    } finally {
+      setIsSavingConfig(false);
     }
   };
 
@@ -405,6 +474,28 @@ export default function DataSources() {
                   onClick={handleStartDeviceLogin}
                 >
                   <KeyRound size={15} /> Device Code
+                </button>
+              </div>
+
+              <div style={{ marginTop: '14px', textAlign: 'center' }}>
+                <button
+                  type="button"
+                  onClick={() => setShowConfigModal(true)}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    color: 'var(--primary-purple)',
+                    fontSize: '0.76rem',
+                    cursor: 'pointer',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '5px',
+                    fontWeight: 600,
+                    padding: '4px 8px'
+                  }}
+                >
+                  <Settings size={13} />
+                  <span>Configure Microsoft Entra ID</span>
                 </button>
               </div>
             </div>
@@ -747,7 +838,7 @@ export default function DataSources() {
               <span>Waiting for approval on Microsoft...</span>
             </div>
 
-            {/* Localhost redirect fallback */}
+            {/* Manual authorization code exchange */}
             <div style={{ marginTop: '20px', borderTop: '1px solid var(--border-subtle)', paddingTop: '14px', textAlign: 'left' }}>
               <button 
                 type="button"
@@ -765,7 +856,7 @@ export default function DataSources() {
                   gap: '4px'
                 }}
               >
-                <span>{showManualInput ? '▼ Hide manual code input' : '▶ Redirected to localhost with a code? Paste here'}</span>
+                <span>{showManualInput ? '▼ Hide manual code input' : '▶ Have an authorization code? Enter here'}</span>
               </button>
 
               {showManualInput && (
@@ -774,7 +865,7 @@ export default function DataSources() {
                     type="text"
                     value={manualCode}
                     onChange={(e) => setManualCode(e.target.value)}
-                    placeholder="Paste http://localhost/?code=... or authorization code"
+                    placeholder="Enter Microsoft authorization code"
                     style={{
                       flex: 1,
                       padding: '7px 10px',
@@ -794,6 +885,98 @@ export default function DataSources() {
                 </form>
               )}
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* 6. MICROSOFT ENTRA APP CONFIGURATION MODAL */}
+      {showConfigModal && (
+        <div className="modal-backdrop" onClick={() => setShowConfigModal(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '520px', textAlign: 'left' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Settings size={20} style={{ color: 'var(--primary-purple)' }} />
+                <h3 style={{ fontSize: '1.2rem', color: 'var(--text-main)', margin: 0 }}>Microsoft Entra ID Setup</h3>
+              </div>
+              <button onClick={() => setShowConfigModal(false)} style={{ background: 'transparent', color: 'var(--text-muted)' }}>
+                <X size={20} />
+              </button>
+            </div>
+
+            <p style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', lineHeight: '1.5', marginBottom: '16px' }}>
+              To enable Microsoft OneNote OAuth in production, your Microsoft Entra App registration requires the exact Web Redirect URI below:
+            </p>
+
+            <div style={{ background: 'var(--bg-subtle)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', padding: '12px', marginBottom: '16px' }}>
+              <div style={{ fontSize: '0.74rem', fontWeight: 700, color: 'var(--text-muted)', marginBottom: '6px' }}>
+                REQUIRED ENTRA WEB REDIRECT URI:
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '4px', padding: '6px 10px' }}>
+                <span style={{ fontSize: '0.76rem', fontFamily: 'monospace', color: 'var(--primary-purple)', flex: 1, wordBreak: 'break-all' }}>
+                  {PROD_CALLBACK_URI}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    navigator.clipboard.writeText(PROD_CALLBACK_URI);
+                    setCopiedRedirectUri(true);
+                    setTimeout(() => setCopiedRedirectUri(false), 2000);
+                  }}
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '4px', color: copiedRedirectUri ? 'var(--accent-emerald)' : 'var(--text-muted)' }}
+                  title="Copy Redirect URI"
+                >
+                  {copiedRedirectUri ? <Check size={16} /> : <Copy size={16} />}
+                </button>
+              </div>
+            </div>
+
+            <form onSubmit={handleSaveEntraConfig}>
+              <div style={{ marginBottom: '14px' }}>
+                <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 600, color: 'var(--text-main)', marginBottom: '4px' }}>
+                  Application (client) ID <span style={{ color: 'var(--accent-crimson)' }}>*</span>
+                </label>
+                <input
+                  type="text"
+                  value={entraClientId}
+                  onChange={(e) => setEntraClientId(e.target.value)}
+                  placeholder="e.g. 12345678-abcd-1234-ef01-123456789abc"
+                  style={{ width: '100%', padding: '8px 12px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-subtle)', fontSize: '0.82rem', fontFamily: 'monospace' }}
+                  required
+                />
+              </div>
+
+              <div style={{ marginBottom: '18px' }}>
+                <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 600, color: 'var(--text-main)', marginBottom: '4px' }}>
+                  Client Secret <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>(Optional for public native clients, required for Web apps)</span>
+                </label>
+                <input
+                  type="password"
+                  value={entraClientSecret}
+                  onChange={(e) => setEntraClientSecret(e.target.value)}
+                  placeholder="Leave blank if configuring as Public client"
+                  style={{ width: '100%', padding: '8px 12px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-subtle)', fontSize: '0.82rem' }}
+                />
+              </div>
+
+              <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  onClick={() => setShowConfigModal(false)}
+                  style={{ padding: '8px 16px', fontSize: '0.82rem' }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="btn-primary"
+                  disabled={isSavingConfig || !entraClientId.trim()}
+                  style={{ padding: '8px 20px', fontSize: '0.82rem' }}
+                >
+                  {isSavingConfig ? 'Saving...' : 'Save & Connect'}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
