@@ -77,8 +77,8 @@ async def search_saree_design(
     struct_preview_path = os.path.join(storage_dir, struct_preview_filename)
     cv2.imwrite(struct_preview_path, structural_map)
     del structural_map
-    import gc
-    gc.collect()
+    from app.vision.feature_extractor import trim_memory
+    trim_memory()
 
     # 4. Check if user's connected OneNote has any indexed images
     if user_index.count() == 0:

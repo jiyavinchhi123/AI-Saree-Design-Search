@@ -785,8 +785,8 @@ async def sync_onenote(
                         finally:
                             if 'structural_map' in locals():
                                 del structural_map
-                            import gc
-                            gc.collect()
+                            from app.vision.feature_extractor import trim_memory
+                            trim_memory()
 
         # RECONCILIATION: CLOUD IS THE ONLY SOURCE OF TRUTH
         # Rebuild vector index completely from active cloud items (handles additions, updates & deletions)

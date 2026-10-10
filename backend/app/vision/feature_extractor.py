@@ -23,6 +23,17 @@ import torchvision.transforms as transforms
 from PIL import Image
 from typing import Tuple, List, Union
 
+def trim_memory():
+    """Forces Python garbage collection and glibc heap page return to Linux kernel."""
+    import gc
+    gc.collect()
+    try:
+        import ctypes
+        libc = ctypes.CDLL("libc.so.6")
+        libc.malloc_trim(0)
+    except Exception:
+        pass
+
 class ColorInvariantFeatureExtractor:
     _shared_model = None  # Process-wide singleton: DINOv2 is loaded strictly ONCE across the entire backend
 
@@ -36,6 +47,7 @@ class ColorInvariantFeatureExtractor:
         if self.device.type == "cpu":
             try:
                 torch.set_num_threads(1)
+                torch.set_num_interop_threads(1)
             except Exception:
                 pass
 
@@ -52,35 +64,25 @@ class ColorInvariantFeatureExtractor:
     def model(self):
         """Lazy load DINOv2 model on first search request strictly ONCE as a shared singleton"""
         if ColorInvariantFeatureExtractor._shared_model is None:
-            import gc
-            gc.collect()
+            trim_memory()
             torch.set_grad_enabled(False)
             if self.device.type == "cpu":
                 try:
                     torch.set_num_threads(1)
+                    torch.set_num_interop_threads(1)
                 except Exception:
                     pass
-            print("[AI Saree Search] Initializing DINOv2 vision model on demand (singleton)...")
-            model = torch.hub.load('facebookresearch/dinov2', 'dinov2_vits14')
-            model.to(self.device)
-            model.eval()
-            for p in model.parameters():
-                p.requires_grad = False
+            print("[AI Saree Search] Initializing DINOv2 vision model on demand (singleton)...", flush=True)
+            with torch.inference_mode():
+                model = torch.hub.load('facebookresearch/dinov2', 'dinov2_vits14')
+                model.to(self.device)
+                model.eval()
+                for p in model.parameters():
+                    p.requires_grad = False
             ColorInvariantFeatureExtractor._shared_model = model
-            gc.collect()
-            print("[AI Saree Search] DINOv2 vision model loaded successfully.")
+            trim_memory()
+            print("[AI Saree Search] DINOv2 vision model loaded successfully.", flush=True)
         return ColorInvariantFeatureExtractor._shared_model
-
-    def warmup(self):
-        """Pre-loads DINOv2 model and runs a dummy tensor during startup so no memory spike occurs during search requests."""
-        _ = self.model
-        dummy = torch.zeros((1, 3, 224, 224), dtype=torch.float32, device=self.device)
-        with torch.inference_mode():
-            _ = self.model.forward_features(dummy)
-        del dummy
-        import gc
-        gc.collect()
-        print("[AI Saree Search] DINOv2 vision model pre-warmed and ready.")
 
     def preprocess_to_structural_tensor(self, image_np: np.ndarray) -> np.ndarray:
         """
@@ -195,7 +197,7 @@ class ColorInvariantFeatureExtractor:
             bottom_np = bottom_border.cpu().numpy()
 
         del tensor, feat, cls_tok, patch_tok, grid
-        gc.collect()
+        trim_memory()
 
         # Zone-wise L2 normalization before weighted composition
         cls_np /= (np.linalg.norm(cls_np) + 1e-7)

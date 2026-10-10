@@ -16,6 +16,10 @@ services:
         value: "1"
       - key: TORCH_NUM_THREADS
         value: "1"
+      - key: MALLOC_TRIM_THRESHOLD_
+        value: "65536"
+      - key: MALLOC_ARENA_MAX
+        value: "2"
       - key: ENV
         value: "production"
       - key: FRONTEND_URL

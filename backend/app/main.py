@@ -7,10 +7,14 @@ os.environ["VECLIB_MAXIMUM_THREADS"] = "1"
 os.environ["NUMEXPR_NUM_THREADS"] = "1"
 os.environ["TORCH_NUM_THREADS"] = "1"
 
+os.environ["MALLOC_TRIM_THRESHOLD_"] = "65536"
+os.environ["MALLOC_ARENA_MAX"] = "2"
+
 import torch
 torch.set_grad_enabled(False)
 try:
     torch.set_num_threads(1)
+    torch.set_num_interop_threads(1)
 except Exception:
     pass
 
@@ -41,11 +45,6 @@ async def lifespan(app: FastAPI):
     db = SessionLocal()
     try:
         run_auto_seed(db)
-        try:
-            extractor.warmup()
-        except Exception as we:
-            print(f"[AI Saree Search] DINOv2 warmup notice: {we}")
-
         user = db.query(UserRecord).order_by(UserRecord.connected_at.desc()).first()
         if user:
             token = await onenote_client.get_valid_token_for_user(user.id, db)
