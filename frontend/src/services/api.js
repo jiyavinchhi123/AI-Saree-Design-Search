@@ -1,25 +1,25 @@
+const RENDER_PROD_BASE = 'https://ai-saree-design-search.onrender.com';
+const RENDER_PROD_API = `${RENDER_PROD_BASE}/api`;
+
 const rawApiUrl = import.meta.env.VITE_API_URL;
 const isProduction = typeof window !== 'undefined' && 
   window.location.hostname !== 'localhost' && 
   window.location.hostname !== '127.0.0.1';
 
-// In production, prevent any legacy localhost or undefined VITE_API_URL from breaking requests
-const sanitizedApiUrl = (isProduction && rawApiUrl && (rawApiUrl.includes('localhost') || rawApiUrl.includes('127.0.0.1')))
-  ? 'https://ai-saree-design-search.onrender.com'
-  : (rawApiUrl || '');
-
-const API_BASE = sanitizedApiUrl 
-  ? (sanitizedApiUrl.endsWith('/api') ? sanitizedApiUrl : `${sanitizedApiUrl.replace(/\/$/, '')}/api`)
-  : '/api';
+// In production, direct connection to Render backend completely bypasses
+// Vercel preview deployment protection (SSO/login walls), proxy payload size limits, and 10s timeouts.
+const API_BASE = isProduction
+  ? ((rawApiUrl && !rawApiUrl.includes('localhost') && !rawApiUrl.includes('127.0.0.1'))
+      ? (rawApiUrl.endsWith('/api') ? rawApiUrl : `${rawApiUrl.replace(/\/$/, '')}/api`)
+      : RENDER_PROD_API)
+  : (rawApiUrl ? (rawApiUrl.endsWith('/api') ? rawApiUrl : `${rawApiUrl.replace(/\/$/, '')}/api`) : '/api');
 
 export const resolveImageUrl = (url) => {
   if (!url || typeof url !== 'string') return '';
   if (url.startsWith('http://') || url.startsWith('https://') || url.startsWith('data:') || url.startsWith('blob:')) {
     return url;
   }
-  const backendBase = sanitizedApiUrl 
-    ? sanitizedApiUrl.replace(/\/api\/?$/, '').replace(/\/$/, '') 
-    : (isProduction ? 'https://ai-saree-design-search.onrender.com' : '');
+  const backendBase = isProduction ? RENDER_PROD_BASE : '';
   return backendBase ? `${backendBase}${url.startsWith('/') ? '' : '/'}${url}` : url;
 };
 
@@ -64,12 +64,45 @@ const getHeaders = (extra = {}) => {
   return headers;
 };
 
+/**
+ * Robust fetch that connects directly to Render backend with automatic fallback to local /api proxy.
+ * Completely immune to Vercel preview deployment login/SSO walls and proxy timeouts.
+ */
+const apiFetch = async (endpoint, options = {}) => {
+  const cleanEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
+  
+  // Prioritize direct Render URL in production (with /api rewrite as fallback)
+  const candidateUrls = isProduction
+    ? [
+        `${RENDER_PROD_API}${cleanEndpoint}`,
+        `/api${cleanEndpoint}`
+      ]
+    : [
+        `${API_BASE}${cleanEndpoint}`
+      ];
+
+  let lastError = null;
+  for (const url of candidateUrls) {
+    try {
+      const res = await fetch(url, options);
+      // If Vercel preview authentication intercepted with an HTML login page (401 with text/html)
+      if (res.status === 401 && res.headers.get('content-type')?.includes('text/html')) {
+        continue;
+      }
+      return res;
+    } catch (err) {
+      lastError = err;
+    }
+  }
+
+  throw lastError || new Error('Backend connection failed. Please ensure the cloud server is awake.');
+};
+
 export const isPageSpecificOneNoteUrl = (url) => {
   if (!url || typeof url !== 'string' || !url.startsWith('https://')) {
     return false;
   }
   const lower = url.toLowerCase();
-  // Check for specific OneNote page URL markers (wd=target, resid=, page=, pageid=)
   return lower.includes('wd=target') || lower.includes('resid=') || lower.includes('page=') || lower.includes('pageid=');
 };
 
@@ -80,40 +113,27 @@ export const getExactPageWebUrl = (item) => {
   if (typeof item === 'string') {
     url = item.trim();
   } else if (typeof item === 'object') {
-    // 1. Primary: exact stored page_web_url directly from Microsoft Graph links.oneNoteWebUrl.href
     if (item.page_web_url && typeof item.page_web_url === 'string') {
       url = item.page_web_url.trim();
-    }
-    // 2. Exact oneNoteWebUrl
-    else if (item.oneNoteWebUrl && typeof item.oneNoteWebUrl === 'string') {
+    } else if (item.oneNoteWebUrl && typeof item.oneNoteWebUrl === 'string') {
       url = item.oneNoteWebUrl.trim();
-    }
-    // 3. Fallback onenote_web_url
-    else if (item.onenote_web_url && typeof item.onenote_web_url === 'string') {
+    } else if (item.onenote_web_url && typeof item.onenote_web_url === 'string') {
       url = item.onenote_web_url.trim();
-    }
-    // 4. Fallback search history top_match_page_web_url
-    else if (item.top_match_page_web_url && typeof item.top_match_page_web_url === 'string') {
+    } else if (item.top_match_page_web_url && typeof item.top_match_page_web_url === 'string') {
       url = item.top_match_page_web_url.trim();
-    }
-    // 5. Fallback web_url
-    else if (item.web_url && typeof item.web_url === 'string') {
+    } else if (item.web_url && typeof item.web_url === 'string') {
       url = item.web_url.trim();
     }
   }
 
   if (!url || !url.startsWith('https://')) {
-    console.warn('[OneNote Navigation] No valid HTTPS page URL found:', item);
     return '';
   }
 
-  // Reject onenote: desktop protocol
   if (url.toLowerCase().startsWith('onenote:')) {
-    console.warn('[OneNote Navigation] Rejecting onenote: protocol URL:', url);
     return '';
   }
 
-  // Reject generic homepage / notebook list fallbacks
   const lower = url.toLowerCase();
   if (
     lower === 'https://onenote.com' ||
@@ -124,25 +144,15 @@ export const getExactPageWebUrl = (item) => {
     lower === 'https://onedrive.live.com' ||
     lower === 'https://onedrive.live.com/'
   ) {
-    console.warn('[OneNote Navigation] Rejecting generic homepage URL:', url);
     return '';
   }
 
   return url;
 };
 
-// Backward-compatible aliases: all strictly resolve to the exact page-level HTTPS URL
-export const getExactObjectWebUrl = (item) => {
-  return getExactPageWebUrl(item);
-};
-
-export const getCleanOneNoteUrl = (itemOrUrl, designId = null) => {
-  return getExactPageWebUrl(itemOrUrl);
-};
-
-export const getCleanOneNoteWebUrl = (itemOrUrl, designId = null) => {
-  return getExactPageWebUrl(itemOrUrl);
-};
+export const getExactObjectWebUrl = (item) => getExactPageWebUrl(item);
+export const getCleanOneNoteUrl = (itemOrUrl) => getExactPageWebUrl(itemOrUrl);
+export const getCleanOneNoteWebUrl = (itemOrUrl) => getExactPageWebUrl(itemOrUrl);
 
 export const isValidOneNoteDeepLink = (url) => {
   if (!url || typeof url !== 'string' || !url.startsWith('onenote:')) return false;
@@ -178,7 +188,7 @@ export const api = {
     formData.append('file', file);
     formData.append('threshold', threshold.toString());
     formData.append('top_k', topK.toString());
-    const res = await fetch(`${API_BASE}/search/upload`, {
+    const res = await apiFetch('/search/upload', {
       method: 'POST',
       headers: getHeaders(),
       body: formData,
@@ -203,7 +213,7 @@ export const api = {
   // OneNote & Data Sources Status
   getOneNoteStatus: async () => {
     try {
-      const res = await fetch(`${API_BASE}/data-sources/onenote/status`, {
+      const res = await apiFetch('/data-sources/onenote/status', {
         headers: getHeaders(),
       });
       if (!res.ok) {
@@ -221,21 +231,21 @@ export const api = {
   },
 
   getOneNoteAuthUrl: async () => {
-    const res = await fetch(`${API_BASE}/data-sources/onenote/auth/url`, {
+    const res = await apiFetch('/data-sources/onenote/auth/url', {
       headers: getHeaders(),
     });
     return res.json();
   },
 
   getOneNoteAuthConfig: async () => {
-    const res = await fetch(`${API_BASE}/data-sources/onenote/auth/config`, {
+    const res = await apiFetch('/data-sources/onenote/auth/config', {
       headers: getHeaders(),
     });
     return res.json();
   },
 
   saveOneNoteAuthConfig: async (config) => {
-    const res = await fetch(`${API_BASE}/data-sources/onenote/auth/config`, {
+    const res = await apiFetch('/data-sources/onenote/auth/config', {
       method: 'POST',
       headers: getHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify(config),
@@ -248,7 +258,7 @@ export const api = {
   },
 
   getOneNoteNotebooks: async () => {
-    const res = await fetch(`${API_BASE}/data-sources/onenote/notebooks`, {
+    const res = await apiFetch('/data-sources/onenote/notebooks', {
       headers: getHeaders(),
     });
     if (!res.ok) {
@@ -259,7 +269,7 @@ export const api = {
   },
 
   syncOneNote: async (notebookIds = null) => {
-    const res = await fetch(`${API_BASE}/data-sources/onenote/sync`, {
+    const res = await apiFetch('/data-sources/onenote/sync', {
       method: 'POST',
       headers: getHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify({ notebook_ids: notebookIds }),
@@ -276,7 +286,7 @@ export const api = {
   },
 
   disconnectOneNote: async () => {
-    const res = await fetch(`${API_BASE}/data-sources/onenote/disconnect`, {
+    const res = await apiFetch('/data-sources/onenote/disconnect', {
       method: 'POST',
       headers: getHeaders(),
     });
@@ -286,7 +296,7 @@ export const api = {
 
   // 1-Click Device Login
   startDeviceLogin: async () => {
-    const res = await fetch(`${API_BASE}/data-sources/onenote/device-flow/start`, {
+    const res = await apiFetch('/data-sources/onenote/device-flow/start', {
       headers: getHeaders(),
     });
     if (!res.ok) {
@@ -297,7 +307,7 @@ export const api = {
   },
 
   completeDeviceLogin: async (sessionId = 'default') => {
-    const res = await fetch(`${API_BASE}/data-sources/onenote/device-flow/complete?session_id=${encodeURIComponent(sessionId)}`, {
+    const res = await apiFetch(`/data-sources/onenote/device-flow/complete?session_id=${encodeURIComponent(sessionId)}`, {
       method: 'POST',
       headers: getHeaders(),
     });
@@ -314,7 +324,7 @@ export const api = {
 
   // Exchange Auth Code or Redirect URL directly
   exchangeAuthCode: async (codeOrUrl) => {
-    const res = await fetch(`${API_BASE}/data-sources/onenote/auth/exchange-code`, {
+    const res = await apiFetch('/data-sources/onenote/auth/exchange-code', {
       method: 'POST',
       headers: getHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify({ code: codeOrUrl }),
@@ -333,7 +343,7 @@ export const api = {
   // Designs Catalog
   getDesigns: async (params = {}) => {
     const query = new URLSearchParams(params).toString();
-    const res = await fetch(`${API_BASE}/designs?${query}`, {
+    const res = await apiFetch(`/designs?${query}`, {
       headers: getHeaders(),
     });
     const data = await res.json();
@@ -347,7 +357,7 @@ export const api = {
   },
 
   clearAllDesigns: async () => {
-    const res = await fetch(`${API_BASE}/designs`, { 
+    const res = await apiFetch('/designs', { 
       method: 'DELETE',
       headers: getHeaders(),
     });
@@ -356,7 +366,7 @@ export const api = {
 
   // Search History
   getSearchHistory: async () => {
-    const res = await fetch(`${API_BASE}/history`, {
+    const res = await apiFetch('/history', {
       headers: getHeaders(),
     });
     const data = await res.json();
@@ -372,7 +382,7 @@ export const api = {
   },
 
   clearSearchHistory: async () => {
-    const res = await fetch(`${API_BASE}/history`, {
+    const res = await apiFetch('/history', {
       method: 'DELETE',
       headers: getHeaders(),
     });
@@ -381,7 +391,7 @@ export const api = {
 
   // OneNote & Local File Actions
   openInOneNote: async (designId, mode = 'desktop') => {
-    const res = await fetch(`${API_BASE}/designs/${designId}/open-onenote?mode=${mode}`, {
+    const res = await apiFetch(`/designs/${designId}/open-onenote?mode=${mode}`, {
       method: 'POST',
       headers: getHeaders(),
     });
@@ -393,7 +403,7 @@ export const api = {
   },
 
   openLocalFolder: async (designId) => {
-    const res = await fetch(`${API_BASE}/designs/${designId}/open-local`, {
+    const res = await apiFetch(`/designs/${designId}/open-local`, {
       method: 'POST',
       headers: getHeaders(),
     });
@@ -405,7 +415,7 @@ export const api = {
   },
 
   getDesignLocation: async (designId) => {
-    const res = await fetch(`${API_BASE}/designs/${designId}/location`, {
+    const res = await apiFetch(`/designs/${designId}/location`, {
       headers: getHeaders(),
     });
     return res.json();

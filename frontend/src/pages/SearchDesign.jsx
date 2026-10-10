@@ -136,11 +136,23 @@ export default function SearchDesign() {
       // Optimize image on client side (max 800px, under 250KB) to ensure fast upload
       // and eliminate any cloud memory spikes on Render
       const uploadFile = await optimizeImageForUpload(selectedFile);
-      const res = await api.searchByImage(uploadFile, 0.0, 50);
+      let res;
+      try {
+        res = await api.searchByImage(uploadFile, 0.0, 50);
+      } catch (firstErr) {
+        // If initial connection failed because container was spinning up, retry once automatically
+        console.warn('Initial search attempt failed, retrying...', firstErr);
+        await new Promise(r => setTimeout(r, 1500));
+        res = await api.searchByImage(uploadFile, 0.0, 50);
+      }
       setSearchResult(res);
     } catch (err) {
       console.error('Search error:', err);
-      setErrorMsg(err.message || 'Error occurred during vector retrieval. Please verify backend connection.');
+      const isFetchErr = err?.message?.toLowerCase().includes('failed to fetch');
+      const friendlyMsg = isFetchErr
+        ? 'Connecting to Cloud AI backend... If the free server was asleep, please click Find Matching Designs again in a few seconds.'
+        : (err.message || 'Error occurred during vector retrieval.');
+      setErrorMsg(friendlyMsg);
     } finally {
       setIsSearching(false);
     }
