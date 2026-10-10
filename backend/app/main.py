@@ -41,6 +41,11 @@ async def lifespan(app: FastAPI):
     db = SessionLocal()
     try:
         run_auto_seed(db)
+        try:
+            extractor.warmup()
+        except Exception as we:
+            print(f"[AI Saree Search] DINOv2 warmup notice: {we}")
+
         user = db.query(UserRecord).order_by(UserRecord.connected_at.desc()).first()
         if user:
             token = await onenote_client.get_valid_token_for_user(user.id, db)

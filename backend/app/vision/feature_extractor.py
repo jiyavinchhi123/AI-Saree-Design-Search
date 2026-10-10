@@ -71,6 +71,17 @@ class ColorInvariantFeatureExtractor:
             print("[AI Saree Search] DINOv2 vision model loaded successfully.")
         return ColorInvariantFeatureExtractor._shared_model
 
+    def warmup(self):
+        """Pre-loads DINOv2 model and runs a dummy tensor during startup so no memory spike occurs during search requests."""
+        _ = self.model
+        dummy = torch.zeros((1, 3, 224, 224), dtype=torch.float32, device=self.device)
+        with torch.inference_mode():
+            _ = self.model.forward_features(dummy)
+        del dummy
+        import gc
+        gc.collect()
+        print("[AI Saree Search] DINOv2 vision model pre-warmed and ready.")
+
     def preprocess_to_structural_tensor(self, image_np: np.ndarray) -> np.ndarray:
         """
         Converts any RGB/BGR image into a 3-channel structural visualization map:
@@ -150,14 +161,14 @@ class ColorInvariantFeatureExtractor:
             img_bgr = cv2.cvtColor(img_rgb, cv2.COLOR_RGB2BGR)
             del img_rgb
         elif isinstance(image_input, np.ndarray):
-            img_bgr = image_input.copy()
+            img_bgr = image_input
         else:
             raise TypeError("Unsupported image input type")
 
-        # Downscale immediately to max 640px if image is oversized to prevent high-res RAM bloat
+        # Downscale immediately to max 512px if image is oversized to prevent high-res RAM bloat
         h, w = img_bgr.shape[:2]
-        if max(h, w) > 640:
-            scale = 640.0 / max(h, w)
+        if max(h, w) > 512:
+            scale = 512.0 / max(h, w)
             img_bgr = cv2.resize(img_bgr, (int(w * scale), int(h * scale)), interpolation=cv2.INTER_AREA)
 
         # 1. Structural tensor representation for inspection (224x224x3)

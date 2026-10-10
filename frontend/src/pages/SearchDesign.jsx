@@ -69,6 +69,62 @@ export default function SearchDesign() {
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
+  // Fast client-side image downscaler to ensure uploads are lightweight (<250KB)
+  // and eliminate Vercel proxy payload limits and Render cloud container memory spikes
+  const optimizeImageForUpload = (file, maxDimension = 800, quality = 0.85) => {
+    return new Promise((resolve) => {
+      if (!file || !file.type.startsWith('image/') || file.size < 200 * 1024) {
+        resolve(file);
+        return;
+      }
+
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const img = new Image();
+        img.onload = () => {
+          let width = img.width;
+          let height = img.height;
+
+          if (width > maxDimension || height > maxDimension) {
+            if (width > height) {
+              height = Math.round((height * maxDimension) / width);
+              width = maxDimension;
+            } else {
+              width = Math.round((width * maxDimension) / height);
+              height = maxDimension;
+            }
+          }
+
+          const canvas = document.createElement('canvas');
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(img, 0, 0, width, height);
+
+          canvas.toBlob(
+            (blob) => {
+              if (blob && blob.size < file.size) {
+                const optimizedFile = new File([blob], file.name.replace(/\.[^/.]+$/, "") + ".jpg", {
+                  type: 'image/jpeg',
+                  lastModified: Date.now()
+                });
+                resolve(optimizedFile);
+              } else {
+                resolve(file);
+              }
+            },
+            'image/jpeg',
+            quality
+          );
+        };
+        img.onerror = () => resolve(file);
+        img.src = e.target.result;
+      };
+      reader.onerror = () => resolve(file);
+      reader.readAsDataURL(file);
+    });
+  };
+
   const executeSearch = async () => {
     if (!selectedFile) {
       setErrorMsg('Please upload a saree photo to begin searching.');
@@ -77,10 +133,10 @@ export default function SearchDesign() {
     setIsSearching(true);
     setErrorMsg(null);
     try {
-      // Baseline retrieval with top_k: 50 so all candidate matches in the catalog
-      // are retrieved, allowing the client-side confidence threshold slider
-      // to filter in real time without running another AI search.
-      const res = await api.searchByImage(selectedFile, 0.0, 50);
+      // Optimize image on client side (max 800px, under 250KB) to ensure fast upload
+      // and eliminate any cloud memory spikes on Render
+      const uploadFile = await optimizeImageForUpload(selectedFile);
+      const res = await api.searchByImage(uploadFile, 0.0, 50);
       setSearchResult(res);
     } catch (err) {
       console.error('Search error:', err);

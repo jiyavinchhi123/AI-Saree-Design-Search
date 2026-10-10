@@ -903,8 +903,41 @@ export default function DataSources() {
               </button>
             </div>
 
+            <div style={{
+              background: 'linear-gradient(135deg, #f5f3ff 0%, #ede9fe 100%)',
+              border: '1px solid #c4b5fd',
+              borderRadius: 'var(--radius-md)',
+              padding: '16px',
+              marginBottom: '20px'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
+                <Sparkles size={18} style={{ color: 'var(--primary-purple)' }} />
+                <strong style={{ fontSize: '0.88rem', color: 'var(--primary-purple)' }}>Option 1: Instant 1-Click Sign-In (Recommended)</strong>
+              </div>
+              <p style={{ fontSize: '0.80rem', color: 'var(--text-secondary)', marginBottom: '12px', lineHeight: 1.4 }}>
+                Sign in with any Microsoft account using a device code. Zero Azure setup required.
+              </p>
+              <button
+                type="button"
+                className="btn-primary"
+                onClick={() => {
+                  setShowConfigModal(false);
+                  handleStartDeviceLogin();
+                }}
+                style={{ width: '100%', fontSize: '0.84rem', padding: '9px 16px' }}
+              >
+                <KeyRound size={16} /> Connect with Device Code (Instant)
+              </button>
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px' }}>
+              <div style={{ flex: 1, height: '1px', background: 'var(--border-subtle)' }} />
+              <span style={{ fontSize: '0.74rem', color: 'var(--text-muted)', fontWeight: 600 }}>OR OPTION 2: CUSTOM ENTRA APP</span>
+              <div style={{ flex: 1, height: '1px', background: 'var(--border-subtle)' }} />
+            </div>
+
             <p style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', lineHeight: '1.5', marginBottom: '16px' }}>
-              To enable Microsoft OneNote OAuth in production, your Microsoft Entra App registration requires the exact Web Redirect URI below:
+              To enable Microsoft OneNote OAuth in production with your own Azure registration, configure the exact Web Redirect URI below:
             </p>
 
             <div style={{ background: 'var(--bg-subtle)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', padding: '12px', marginBottom: '16px' }}>

@@ -47,7 +47,14 @@ async def search_saree_design(
     del contents, nparr  # Release uploaded byte buffer immediately
     if img_bgr is None:
         raise HTTPException(status_code=400, detail="Invalid image file format")
-    cv2.imwrite(query_img_path, img_bgr)
+
+    # Downscale immediately upon decode to max 512px on longest side to keep memory <1MB
+    h, w = img_bgr.shape[:2]
+    if max(h, w) > 512:
+        scale = 512.0 / max(h, w)
+        img_bgr = cv2.resize(img_bgr, (int(w * scale), int(h * scale)), interpolation=cv2.INTER_AREA)
+
+    cv2.imwrite(query_img_path, img_bgr, [cv2.IMWRITE_JPEG_QUALITY, 85])
 
     # 3. Extract Color-Invariant Feature Vector & Structural Map
     try:
